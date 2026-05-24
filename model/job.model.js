@@ -1,4 +1,4 @@
-import mongoose, { mongo } from "mongoose";
+import mongoose from "mongoose";
 
 const schema = new mongoose.Schema(
   {
@@ -8,8 +8,15 @@ const schema = new mongoose.Schema(
       required: true,
       index: true,
     },
+
     title: { type: String, required: true },
     description: { type: String, default: "" },
+
+    budget: {
+      type: Number,
+      min: 0,
+      default: null,
+    },
 
     locationText: { type: String, default: "" },
     locationGeo: {
@@ -19,23 +26,39 @@ const schema = new mongoose.Schema(
         required: true,
       },
       coordinates: {
-        type: [Number], // [lng, lat]
+        type: [Number],
         required: true,
-        default: undefined,
       },
     },
 
     media: [{ type: String }],
+
     categoryId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Category",
       default: null,
     },
+
     tradePerson: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       default: null,
     },
+
+    progressStage: {
+      type: Number,
+      enum: [0, 1, 2, 3],
+      default: 0,
+    },
+
+    startedAt: { type: Date },
+    completedAt: { type: Date },
+
+    finishedWorkPhotos: [
+      {
+        type: String,
+      },
+    ],
 
     visibility: {
       type: String,
@@ -43,6 +66,7 @@ const schema = new mongoose.Schema(
       default: "public",
       index: true,
     },
+
     invitedTradespersonId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -52,15 +76,15 @@ const schema = new mongoose.Schema(
     status: {
       type: String,
       enum: [
+        "pending",
         "open_to_quotes",
-        "awarded",
-        "in_progress",
+        "ongoing",
         "completed",
-        "inactive",
         "cancelled",
+        "inactive",
         "moderated_by_admin",
       ],
-      default: "open_to_quotes",
+      default: "pending",
       index: true,
     },
 
@@ -70,7 +94,6 @@ const schema = new mongoose.Schema(
 );
 
 schema.index({ locationGeo: "2dsphere" });
-
 schema.index({ title: "text", description: "text" });
 
 export const Job = mongoose.model("Job", schema);
