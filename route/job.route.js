@@ -2,7 +2,6 @@ import { Router } from "express";
 import {
   createJobPublic,
   updateJob,
-  createPrivateJobRequestQuote,
   getJobDetails,
   listApplicantsForJob,
   listJobsNearYou,
@@ -10,6 +9,7 @@ import {
   updateJobStatususer,
   getCurrentJobs,
   getTradespersonJobFeed,
+  updateJobProgress,
 } from "../controller/job.controller.js";
 import { protect } from "../middleware/auth.middleware.js";
 import upload from "../middleware/multer.middleware.js";
@@ -29,14 +29,9 @@ router.get("/:jobId", getJobDetails);
 
 // user
 router.post("/", protect, upload.array("files", 10), createJobPublic);
-router.post(
-  "/private/request-quote",
-  protect,
-  upload.array("files", 10),
-  createPrivateJobRequestQuote,
-);
 router.get("/me/user", protect, listMyJobsuser);
 router.get("/:jobId/applicants", protect, listApplicantsForJob);
 router.patch("/:jobId", protect, updateJobStatususer);
+router.patch("/:jobId/progress", protect, updateJobProgress);
 
 export default router;

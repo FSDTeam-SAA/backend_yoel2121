@@ -6,17 +6,20 @@ import AppError from "../errors/AppError.js";
 import { uploadOnCloudinary } from "../utils/commonMethod.js";
 
 export const createJobPublic = catchAsync(async (req, res, next) => {
-  const { title, description, locationText, categoryId, lng, lat } = req.body;
+  const { title, description, budget, locationText, categoryId, lng, lat } =
+    req.body;
   if (!title) return next(new AppError(400, "title required"));
 
   const job = await Job.create({
     userId: req.user._id,
     title,
     description: description || "",
+    budget: budget || null,
     locationText: locationText || "",
     categoryId: categoryId || null,
     visibility: "public",
-    status: "open_to_quotes",
+    status: "pending",
+    progressStage: 0,
     locationGeo:
       lng && lat
         ? { type: "Point", coordinates: [Number(lng), Number(lat)] }
@@ -66,6 +69,7 @@ export const updateJob = catchAsync(async (req, res, next) => {
   if (title) job.title = title;
   if (description) job.description = description;
   if (locationText) job.locationText = locationText;
+  if (budget !== undefined) job.budget = budget;
 
   if (lat && lng) {
     job.locationGeo = {
@@ -95,54 +99,6 @@ export const updateJob = catchAsync(async (req, res, next) => {
   });
 });
 
-// Request a Quote => creates private job for a specific tradesperson
-export const createPrivateJobRequestQuote = catchAsync(
-  async (req, res, next) => {
-    const {
-      tradespersonId,
-      title,
-      description,
-      locationText,
-      categoryId,
-      lng,
-      lat,
-    } = req.body;
-    if (!tradespersonId || !title)
-      return next(new AppError(400, "tradespersonId and title required"));
-
-    const job = await Job.create({
-      invitedTradespersonId: tradespersonId,
-      title,
-      description: description || "",
-      locationText: locationText || "",
-      categoryId: categoryId || null,
-      visibility: "private",
-      status: "awarded",
-      locationGeo:
-        lng && lat
-          ? { type: "Point", coordinates: [Number(lng), Number(lat)] }
-          : undefined,
-    });
-
-    if (req.files && req.files.length > 0) {
-      const mediaUrls = [];
-      for (const file of req.files) {
-        const upload = await uploadOnCloudinary(file.buffer);
-        mediaUrls.push(upload.secure_url);
-      }
-      job.media = mediaUrls;
-      await job.save();
-    }
-
-    sendResponse(res, {
-      statusCode: 201,
-      success: true,
-      message: "Private job created",
-      data: job,
-    });
-  },
-);
-
 export const listJobsNearYou = catchAsync(async (req, res) => {
   const { page = 1, limit = 10, categoryId, q, lng, lat, radiusKm } = req.query;
 
@@ -152,7 +108,7 @@ export const listJobsNearYou = catchAsync(async (req, res) => {
   const baseFilter = {
     userId: { $ne: req.user._id },
     visibility: "public",
-    status: "open_to_quotes",
+    status: "pending",
   };
 
   if (categoryId) {
@@ -244,7 +200,8 @@ export const listJobsNearYou = catchAsync(async (req, res) => {
 
 export const getJobDetails = catchAsync(async (req, res, next) => {
   const job = await Job.findById(req.params.jobId)
-    .populate("userId", "name")
+    .populate("userId", "name  name email phone profileImage location")
+    .populate("tradesperson", "name email phone profileImage")
     .populate("categoryId", "name");
   if (!job) return next(new AppError(404, "Job not found"));
   sendResponse(res, {
@@ -278,7 +235,7 @@ export const listApplicantsForJob = catchAsync(async (req, res, next) => {
 
   const apps = await Application.find({ jobId: job._id }).populate(
     "tradespersonId  jobId",
-    "name profileImage ratingSummary bio externalRatings externalReviewLinks title",
+    "name profileImage ratingSummary bio externalRatings externalReviewLinks title budget progressStage status",
   );
 
   sendResponse(res, {
@@ -314,7 +271,10 @@ export const getCurrentJobs = catchAsync(async (req, res) => {
     tradespersonId: req.user._id,
     status: "active",
   })
-    .populate("jobId", "title locationText status visibility relatedFiles")
+    .populate(
+      "jobId",
+      "title locationText status visibility relatedFiles budget progressStage status ",
+    )
     .sort({ createdAt: -1 });
 
   sendResponse(res, {
@@ -345,24 +305,46 @@ export const getTradespersonJobFeed = catchAsync(async (req, res) => {
     .populate("categoryId", "name")
     .populate("userId", "name");
 
-  const privateFilter = {
-    visibility: "private",
-    status: "awarded",
-    invitedTradespersonId: tradespersonId,
-  };
-
-  const privateJobs = await Job.find(privateFilter)
-    .sort({ createdAt: -1 })
-    .populate("categoryId", "name")
-    .populate("userId", "name email phone");
-
   sendResponse(res, {
     statusCode: 200,
     success: true,
     message: "Tradesperson job feed fetched successfully",
     data: {
       recentJobs,
-      privateJobs,
     },
+  });
+});
+
+export const updateJobProgress = catchAsync(async (req, res) => {
+  const { progressStage } = req.body;
+
+  const job = await Job.findById(req.params.id);
+  if (!job) return res.status(404).json({ message: "Job not found" });
+
+  if (job.tradePerson.toString() !== req.user._id.toString()) {
+    return next(
+      new AppError(403, "Only the assigned tradesperson can update progress"),
+    );
+  }
+
+  job.progressStage = progressStage;
+
+  if (progressStage === 1) {
+    job.startedAt = new Date();
+    job.status = "started";
+  } else if (progressStage === 2) {
+    job.status = "in_progress";
+  } else if (progressStage === 3) {
+    job.completedAt = new Date();
+    job.status = "completed";
+  }
+
+  await job.save();
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Job progress updated",
+    data: job,
   });
 });
