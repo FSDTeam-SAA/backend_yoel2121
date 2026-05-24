@@ -62,7 +62,7 @@ const schema = new mongoose.Schema(
 
     visibility: {
       type: String,
-      enum: ["public", "private"],
+      enum: ["public"],
       default: "public",
       index: true,
     },
@@ -77,8 +77,10 @@ const schema = new mongoose.Schema(
       type: String,
       enum: [
         "pending",
+        "started",
         "open_to_quotes",
         "ongoing",
+        "in_progress",
         "completed",
         "cancelled",
         "inactive",

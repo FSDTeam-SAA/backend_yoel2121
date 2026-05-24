@@ -12,16 +12,6 @@ export const applyToJob = catchAsync(async (req, res, next) => {
   const job = await Job.findById(jobId);
   if (!job) return next(new AppError(404, "Job not found"));
 
-  // If private job: only invited tradesperson can apply
-  if (
-    job.visibility === "private" &&
-    String(job.invitedTradespersonId) !== String(req.user._id)
-  ) {
-    return next(new AppError(403, "Not invited to this job"));
-  }
-  if (job.status !== "open_to_quotes")
-    return next(new AppError(400, "Job not accepting quotes"));
-
   const app = await Application.create({
     jobId: job._id,
     userId: job.userId,
@@ -104,7 +94,10 @@ export const listMyApplications = catchAsync(async (req, res) => {
 
   const apps = await Application.find(filter)
     .sort({ createdAt: -1 })
-    .populate("jobId", "title locationText status visibility relatedFiles");
+    .populate(
+      "jobId",
+      "title locationText status visibility relatedFiles budget progressStage status ",
+    );
 
   sendResponse(res, {
     statusCode: 200,
