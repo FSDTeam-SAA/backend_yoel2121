@@ -4,10 +4,8 @@ import cloudinary from "cloudinary";
 
 dotenv.config();
 
-const SMTP_HOST = process.env.SMTP_HOST || "smtp-relay.brevo.com";
 const SMTP_PORT = Number(process.env.SMTP_PORT || 587);
 const SMTP_SECURE = process.env.SMTP_SECURE === "true";
-const EMAIL_FROM = process.env.EMAIL_FROM || process.env.EMAIL_USER;
 
 export const sendEmail = async (to, subject, html) => {
   if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
@@ -15,7 +13,7 @@ export const sendEmail = async (to, subject, html) => {
   }
 
   const transporter = nodemailer.createTransport({
-    host: SMTP_HOST,
+    service: "gmail",
     port: SMTP_PORT,
     secure: SMTP_SECURE,
     auth: {
@@ -23,20 +21,19 @@ export const sendEmail = async (to, subject, html) => {
       pass: process.env.EMAIL_PASS,
     },
   });
+
   const content = html ?? "";
   const info = await transporter.sendMail({
-    from: EMAIL_FROM,
+    from: process.env.EMAIL_USER,
     to,
-    subject: subject
-      ? subject
-      : "Password change Link : change it by 10 minutes",
+    subject: subject ? subject : "Varification Code : use it by 10 minutes",
     text: content.replace(/<[^>]*>/g, " ").trim(),
     html: content,
   });
 
   if (!info?.accepted?.length || info?.rejected?.length) {
     throw new Error(
-      `Email was not accepted by SMTP relay. accepted=${info?.accepted?.length || 0}, rejected=${info?.rejected?.length || 0}`
+      `Email was not accepted by SMTP relay. accepted=${info?.accepted?.length || 0}, rejected=${info?.rejected?.length || 0}`,
     );
   }
 
