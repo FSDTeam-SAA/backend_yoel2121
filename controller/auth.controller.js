@@ -13,19 +13,19 @@ const generateVerificationCode = () => {
 
 const buildVerificationOtpEmail = (otp) => `
   <p>Hello,</p>
-  <p>Thank you for signing up with Renevo.</p>
+  <p>Thank you for signing up in ZENTROFIX.</p>
   <p>Your email verification code is <strong>${otp}</strong>.</p>
   <p>This code will expire in 10 minutes.</p>
   <p>If you did not request this code, you can ignore this email.</p>
-  <p>Regards,<br />Renevo Team</p>
+  <p>Regards,<br />ZENTROFIX Team</p>
 `;
 
 const buildResetPasswordOtpEmail = (otp) => `
   <p>Hello,</p>
-  <p>We received a request to reset your Renevo account password.</p>
+  <p>We received a request to reset your account password.</p>
   <p>Your password reset code is <strong>${otp}</strong>.</p>
   <p>This code will expire soon. If you did not request a password reset, please ignore this email.</p>
-  <p>Regards,<br />Renevo Team</p>
+  <p>Regards,<br />ZENTROFIX Team</p>
 `;
 
 export const register = catchAsync(async (req, res, next) => {
