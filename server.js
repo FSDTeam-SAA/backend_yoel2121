@@ -18,13 +18,9 @@ const normalizeOrigin = (origin = "") => origin.trim().replace(/\/+$/, "");
 
 const staticAllowedOrigins = [
   "http://localhost:3000",
-  "http://localhost:59751",
   "http://10.10.5.81:5006",
   "http://localhost:8000",
   "http://127.0.0.1:8000",
-  "https://flutter-pwa.onrender.com",
-  "https://admin.renevo.co.uk",
-  "https://renevo.co.uk",
 ];
 
 const envAllowedOrigins = (process.env.CLIENT_URL || "")
@@ -32,8 +28,9 @@ const envAllowedOrigins = (process.env.CLIENT_URL || "")
   .map((origin) => normalizeOrigin(origin))
   .filter(Boolean);
 
-const allowedOrigins = [...new Set([...staticAllowedOrigins, ...envAllowedOrigins])]
-  .map((origin) => normalizeOrigin(origin));
+const allowedOrigins = [
+  ...new Set([...staticAllowedOrigins, ...envAllowedOrigins]),
+].map((origin) => normalizeOrigin(origin));
 
 const corsOptions = {
   origin: function (origin, callback) {
