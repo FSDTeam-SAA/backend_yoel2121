@@ -20,6 +20,17 @@ const schema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    revieweeId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      index: true,
+    },
+    reviewerRole: {
+      type: String,
+      enum: ["user", "tradesperson"],
+      required: true,
+    },
 
     stars: { type: Number, min: 1, max: 5, required: true },
     text: { type: String, default: "" },
@@ -29,6 +40,12 @@ const schema = new mongoose.Schema(
         url: { type: String, default: "" },
       },
     ],
+    status: {
+      type: String,
+      enum: ["pending", "approved", "rejected", "edited"],
+      default: "pending",
+      index: true,
+    },
     adminEditedText: { type: String, default: "" },
     adminNote: { type: String, default: "" },
   },
