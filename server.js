@@ -18,9 +18,12 @@ const normalizeOrigin = (origin = "") => origin.trim().replace(/\/+$/, "");
 
 const staticAllowedOrigins = [
   "http://localhost:3000",
+  "http://127.0.0.1:3000",
   "http://10.10.5.81:5006",
   "http://localhost:8000",
   "http://127.0.0.1:8000",
+  "https://admin-dashbord-yoel2121.vercel.app",
+  "https://admin-dashboard-yoel2121.vercel.app",
 ];
 
 const envAllowedOrigins = (process.env.CLIENT_URL || "")
@@ -32,11 +35,25 @@ const allowedOrigins = [
   ...new Set([...staticAllowedOrigins, ...envAllowedOrigins]),
 ].map((origin) => normalizeOrigin(origin));
 
+const allowedOriginPatterns = [
+  /^https:\/\/admin-dashbord-yoel2121(?:-[a-z0-9-]+)?\.vercel\.app$/i,
+  /^https:\/\/admin-dashboard-yoel2121(?:-[a-z0-9-]+)?\.vercel\.app$/i,
+  /^http:\/\/localhost:\d+$/i,
+  /^http:\/\/127\.0\.0\.1:\d+$/i,
+];
+
+const isAllowedOrigin = (origin) => {
+  const normalized = normalizeOrigin(origin);
+  return (
+    allowedOrigins.includes(normalized) ||
+    allowedOriginPatterns.some((pattern) => pattern.test(normalized))
+  );
+};
+
 const corsOptions = {
   origin: function (origin, callback) {
     if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(normalizeOrigin(origin)))
-      return callback(null, true);
+    if (isAllowedOrigin(origin)) return callback(null, true);
     return callback(new Error("Not allowed by CORS: " + origin));
   },
   credentials: true,
