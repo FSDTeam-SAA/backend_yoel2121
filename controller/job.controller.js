@@ -1,9 +1,15 @@
-import catchAsync from "../utils/catchAsync.js";
-import sendResponse from "../utils/sendResponse.js";
-import { Job } from "../model/job.model.js";
-import { Application } from "../model/application.model.js";
+import mongoose from "mongoose";
 import AppError from "../errors/AppError.js";
+import { Application } from "../model/application.model.js";
+import { Job } from "../model/job.model.js";
+import { User } from "../model/user.model.js";
+import catchAsync from "../utils/catchAsync.js";
 import { uploadOnCloudinary } from "../utils/commonMethod.js";
+import {
+  sendNotification,
+  sendNotifications,
+} from "../utils/notification.js";
+import sendResponse from "../utils/sendResponse.js";
 
 export const createJobPublic = catchAsync(async (req, res, next) => {
   const { title, description, budget, locationText, categoryId, lng, lat } =
@@ -35,6 +41,31 @@ export const createJobPublic = catchAsync(async (req, res, next) => {
     job.media = mediaUrls;
     await job.save();
   }
+  if (categoryId) {
+    const tradespeople = await User.find({
+      role: "tradesperson",
+      accountStatus: "approved",
+      isEmailVerified: true,
+      operatingTrades: categoryId,
+      _id: { $ne: req.user._id },
+    })
+      .select("_id")
+      .limit(100)
+      .lean();
+
+    await sendNotifications(
+      tradespeople.map((tradesperson) => tradesperson._id),
+      {
+        title: "New job available",
+        message: `A new job "${job.title}" was posted in your trade.`,
+        type: "job_created",
+        data: {
+          jobId: job._id,
+          categoryId,
+        },
+      },
+    );
+  }
 
   sendResponse(res, {
     statusCode: 201,
@@ -64,12 +95,18 @@ export const updateJob = catchAsync(async (req, res, next) => {
     return next(new AppError(403, "You are not allowed to update this job"));
   }
 
-  const { title, description, locationText, lat, lng } = req.body;
+  const { title, description, locationText, budget, lat, lng, status } =
+    req.body;
+  const previousStatus = job.status;
 
   if (title) job.title = title;
   if (description) job.description = description;
   if (locationText) job.locationText = locationText;
   if (budget !== undefined) job.budget = budget;
+  if (status !== undefined) {
+    if (!isuser) return next(new AppError(403, "Home owner only"));
+    job.status = status;
+  }
 
   if (lat && lng) {
     job.locationGeo = {
@@ -90,6 +127,17 @@ export const updateJob = catchAsync(async (req, res, next) => {
   }
 
   await job.save();
+  if (status !== undefined && previousStatus !== job.status) {
+    await sendNotifications([job.tradePerson, job.invitedTradespersonId], {
+      title: "Job status updated",
+      message: `The job "${job.title}" is now ${job.status}.`,
+      type: "job_status",
+      data: {
+        jobId: job._id,
+        status: job.status,
+      },
+    });
+  }
 
   sendResponse(res, {
     statusCode: 200,
@@ -201,7 +249,7 @@ export const listJobsNearYou = catchAsync(async (req, res) => {
 export const getJobDetails = catchAsync(async (req, res, next) => {
   const job = await Job.findById(req.params.jobId)
     .populate("userId", "name  name email phone profileImage location")
-    .populate("tradesperson", "name email phone profileImage")
+    .populate("tradePerson", "name email phone profileImage")
     .populate("categoryId", "name");
   if (!job) return next(new AppError(404, "Job not found"));
   sendResponse(res, {
@@ -258,6 +306,16 @@ export const updateJobStatususer = catchAsync(async (req, res, next) => {
 
   job.status = status;
   await job.save();
+  await sendNotifications([job.tradePerson, job.invitedTradespersonId], {
+    title: "Job status updated",
+    message: `The job "${job.title}" is now ${job.status}.`,
+    type: "job_status",
+    data: {
+      jobId: job._id,
+      status: job.status,
+    },
+  });
+
   sendResponse(res, {
     statusCode: 200,
     success: true,
@@ -315,31 +373,42 @@ export const getTradespersonJobFeed = catchAsync(async (req, res) => {
   });
 });
 
-export const updateJobProgress = catchAsync(async (req, res) => {
+export const updateJobProgress = catchAsync(async (req, res, next) => {
   const { progressStage } = req.body;
 
-  const job = await Job.findById(req.params.id);
-  if (!job) return res.status(404).json({ message: "Job not found" });
+  const job = await Job.findById(req.params.jobId);
+  if (!job) return next(new AppError(404, "Job not found"));
 
-  if (job.tradePerson.toString() !== req.user._id.toString()) {
+  if (job.tradePerson?.toString() !== req.user._id.toString()) {
     return next(
       new AppError(403, "Only the assigned tradesperson can update progress"),
     );
   }
 
-  job.progressStage = progressStage;
+  job.progressStage = Number(progressStage);
 
-  if (progressStage === 1) {
+  if (Number(progressStage) === 1) {
     job.startedAt = new Date();
     job.status = "started";
-  } else if (progressStage === 2) {
+  } else if (Number(progressStage) === 2) {
     job.status = "in_progress";
-  } else if (progressStage === 3) {
+  } else if (Number(progressStage) === 3) {
     job.completedAt = new Date();
     job.status = "completed";
   }
 
   await job.save();
+  await sendNotification({
+    userId: job.userId,
+    title: "Job progress updated",
+    message: `Progress was updated for "${job.title}".`,
+    type: "job_progress",
+    data: {
+      jobId: job._id,
+      progressStage: job.progressStage,
+      status: job.status,
+    },
+  });
 
   sendResponse(res, {
     statusCode: 200,

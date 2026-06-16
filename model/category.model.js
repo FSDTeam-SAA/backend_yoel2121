@@ -8,6 +8,10 @@ const schema = new mongoose.Schema(
       enum: ["pending", "approved", "rejected"],
       default: "approved",
     },
+    image: {
+      public_id: { type: String, default: "" },
+      url: { type: String, default: "" },
+    },
     createdByTradespersonId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",

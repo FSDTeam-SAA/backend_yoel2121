@@ -3,6 +3,7 @@ import sendResponse from "../utils/sendResponse.js";
 import { Category } from "../model/category.model.js";
 import AppError from "../errors/AppError.js";
 import { Job } from "../model/job.model.js";
+import { notifyAdmins } from "../utils/notification.js";
 
 export const listApprovedCategories = catchAsync(async (req, res) => {
   const cats = await Category.find({ status: "approved" }).sort({ name: 1 });
@@ -25,6 +26,15 @@ export const proposeCategory = catchAsync(async (req, res, next) => {
     name: name.trim(),
     status: "pending",
     createdByTradespersonId: req.user._id,
+  });
+  await notifyAdmins({
+    title: "New category proposal",
+    message: `${req.user.name || "A tradesperson"} proposed "${cat.name}".`,
+    type: "category_proposed",
+    data: {
+      categoryId: cat._id,
+      proposedBy: req.user._id,
+    },
   });
 
   sendResponse(res, {

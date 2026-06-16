@@ -12,9 +12,15 @@ const notificationSchema = new Schema(
     type: {
       type: String,
     },
+    data: {
+      type: Schema.Types.Mixed,
+      default: {},
+    },
     isRead: { type: Boolean, default: false },
   },
   { timestamps: true }
 );
+
+notificationSchema.index({ user: 1, isRead: 1, createdAt: -1 });
 
 export const Notification = mongoose.model("Notification", notificationSchema);

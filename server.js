@@ -85,6 +85,13 @@ io.on("connection", (socket) => {
     }
   });
 
+  socket.on("joinNotificationRoom", (userId) => {
+    if (userId) {
+      socket.join(`user_${userId}`);
+      console.log(`Client ${socket.id} joined notification room: ${userId}`);
+    }
+  });
+
   socket.on("joinConversation", (conversationId) => {
     if (conversationId) {
       socket.join(`conv_${conversationId}`);

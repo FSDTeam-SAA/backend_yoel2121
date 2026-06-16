@@ -31,7 +31,7 @@ router.get("/:jobId", getJobDetails);
 router.post("/", protect, upload.array("files", 10), createJobPublic);
 router.get("/me/user", protect, listMyJobsuser);
 router.get("/:jobId/applicants", protect, listApplicantsForJob);
-router.patch("/:jobId", protect, updateJobStatususer);
+router.patch("/:jobId/status", protect, updateJobStatususer);
 router.patch("/:jobId/progress", protect, updateJobProgress);
 
 export default router;
