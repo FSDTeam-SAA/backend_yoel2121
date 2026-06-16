@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import AppError from "../utils/AppError.js";
+import AppError from "../errors/AppError.js";
 
 export const validateObjectId = (paramName) => (req, res, next) => {
   const id = req.params[paramName];
