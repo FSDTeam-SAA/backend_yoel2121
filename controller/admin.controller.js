@@ -6,6 +6,38 @@ import { Review } from "../model/review.model.js";
 import { Category } from "../model/category.model.js";
 import AppError from "../errors/AppError.js";
 import { Application } from "../model/application.model.js";
+import { uploadOnCloudinary } from "../utils/commonMethod.js";
+import {
+  sendNotification,
+  sendNotifications,
+} from "../utils/notification.js";
+
+const updateUserRatingSummary = async (revieweeId) => {
+  const stats = await Review.aggregate([
+    {
+      $match: {
+        revieweeId,
+        status: { $in: ["approved", "edited"] },
+      },
+    },
+    {
+      $group: {
+        _id: "$revieweeId",
+        avg: { $avg: "$stars" },
+        count: { $sum: 1 },
+      },
+    },
+  ]);
+
+  await User.findByIdAndUpdate(revieweeId, {
+    ratingSummary: stats.length
+      ? {
+          avg: Number(stats[0].avg.toFixed(2)),
+          count: stats[0].count,
+        }
+      : { avg: 0, count: 0 },
+  });
+};
 
 export const listUsers = catchAsync(async (req, res) => {
   const { role, status, q } = req.query;
@@ -42,6 +74,18 @@ export const approveRejectUser = catchAsync(async (req, res, next) => {
   else return next(new AppError(400, "Invalid action"));
 
   await user.save();
+  await sendNotification({
+    userId: user._id,
+    title: "Account status updated",
+    message: `Your account has been ${user.accountStatus}.`,
+    type: "account_status",
+    data: {
+      action,
+      accountStatus: user.accountStatus,
+      userId: user._id,
+    },
+  });
+
   sendResponse(res, {
     statusCode: 200,
     success: true,
@@ -74,6 +118,16 @@ export const moderateJob = catchAsync(async (req, res, next) => {
 
   if (action === "delete") {
     await Job.findByIdAndDelete(jobId);
+    await sendNotifications(
+      [job.userId, job.tradePerson, job.invitedTradespersonId],
+      {
+        title: "Job removed by admin",
+        message: `The job "${job.title}" was removed by admin moderation.`,
+        type: "job_moderated",
+        data: { jobId: job._id, action },
+      },
+    );
+
     return sendResponse(res, {
       statusCode: 200,
       success: true,
@@ -86,14 +140,16 @@ export const moderateJob = catchAsync(async (req, res, next) => {
 });
 
 export const listReviews = catchAsync(async (req, res) => {
-  const { status } = req.query;
+  const { status, reviewerRole } = req.query;
   const filter = {};
 
   if (status) filter.status = status;
+  if (reviewerRole) filter.reviewerRole = reviewerRole;
   const reviews = await Review.find(filter)
     .sort({ createdAt: -1 })
     .populate("userId", "name email profileImage")
-    .populate("tradespersonId", "name email profileImage");
+    .populate("tradespersonId", "name email profileImage")
+    .populate("revieweeId", "name email profileImage");
 
   sendResponse(res, {
     statusCode: 200,
@@ -120,6 +176,18 @@ export const approveEditRejectReview = catchAsync(async (req, res, next) => {
 
   if (adminNote) review.adminNote = adminNote;
   await review.save();
+  await updateUserRatingSummary(review.revieweeId);
+  await sendNotifications([review.userId, review.revieweeId], {
+    title: "Review status updated",
+    message: `A review has been ${review.status}.`,
+    type: "review_moderated",
+    data: {
+      reviewId: review._id,
+      jobId: review.jobId,
+      action,
+      status: review.status,
+    },
+  });
 
   sendResponse(res, {
     statusCode: 200,
@@ -135,7 +203,8 @@ export const getReviewDetailsAdmin = catchAsync(async (req, res, next) => {
   const review = await Review.findById(reviewId)
     .populate("jobId", "title locationText status visibility")
     .populate("userId", "name email role")
-    .populate("tradespersonId", "name email role profileImage");
+    .populate("tradespersonId", "name email role profileImage")
+    .populate("revieweeId", "name email role profileImage");
 
   if (!review) return next(new AppError(404, "Review not found"));
 
@@ -252,16 +321,87 @@ export const listCategories = catchAsync(async (req, res) => {
   });
 });
 
+export const createCategory = catchAsync(async (req, res, next) => {
+  const { name, status = "approved" } = req.body;
+
+  if (!name) return next(new AppError(400, "Name required"));
+  if (!req.file) return next(new AppError(400, "Category image required"));
+
+  const categoryName = name.trim();
+  const exists = await Category.findOne({
+    name: new RegExp(`^${categoryName}$`, "i"),
+  });
+
+  if (exists) return next(new AppError(400, "Category already exists"));
+
+  const upload = await uploadOnCloudinary(req.file.buffer);
+  const cat = await Category.create({
+    name: categoryName,
+    status,
+    image: {
+      public_id: upload.public_id,
+      url: upload.secure_url,
+    },
+  });
+
+  sendResponse(res, {
+    statusCode: 201,
+    success: true,
+    message: "Category created",
+    data: cat,
+  });
+});
+
 export const updateCategory = catchAsync(async (req, res, next) => {
   const { categoryId } = req.params;
-  const { status } = req.body;
+  const { name, status } = req.body;
 
   const cat = await Category.findById(categoryId);
   if (!cat) return next(new AppError(404, "Category not found"));
 
+  const previousStatus = cat.status;
+
+  if (name) {
+    const categoryName = name.trim();
+    const exists = await Category.findOne({
+      _id: { $ne: cat._id },
+      name: new RegExp(`^${categoryName}$`, "i"),
+    });
+
+    if (exists) return next(new AppError(400, "Category already exists"));
+    cat.name = categoryName;
+  }
+
   if (status) cat.status = status;
+  if (req.file) {
+    const upload = await uploadOnCloudinary(req.file.buffer);
+    cat.image = {
+      public_id: upload.public_id,
+      url: upload.secure_url,
+    };
+  }
+
+  if (cat.status === "approved" && !cat.image?.url) {
+    return next(new AppError(400, "Category image is required when approving"));
+  }
 
   await cat.save();
+  if (
+    status &&
+    previousStatus !== cat.status &&
+    cat.createdByTradespersonId
+  ) {
+    await sendNotification({
+      userId: cat.createdByTradespersonId,
+      title: "Category status updated",
+      message: `Your proposed category "${cat.name}" has been ${cat.status}.`,
+      type: "category_status",
+      data: {
+        categoryId: cat._id,
+        status: cat.status,
+      },
+    });
+  }
 
   sendResponse(res, {
     statusCode: 200,
@@ -275,6 +415,16 @@ export const deleteCategory = catchAsync(async (req, res, next) => {
   const { categoryId } = req.params;
   const cat = await Category.findByIdAndDelete(categoryId);
   if (!cat) return next(new AppError(404, "Category not found"));
+  if (cat.createdByTradespersonId) {
+    await sendNotification({
+      userId: cat.createdByTradespersonId,
+      title: "Category deleted",
+      message: `Your proposed category "${cat.name}" was deleted by admin.`,
+      type: "category_deleted",
+      data: { categoryId: cat._id },
+    });
+  }
+
   sendResponse(res, {
     statusCode: 200,
     success: true,
