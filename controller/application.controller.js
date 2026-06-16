@@ -1,9 +1,13 @@
-import catchAsync from "../utils/catchAsync.js";
-import sendResponse from "../utils/sendResponse.js";
+import AppError from "../errors/AppError.js";
 import { Application } from "../model/application.model.js";
 import { Job } from "../model/job.model.js";
-import AppError from "../errors/AppError.js";
+import catchAsync from "../utils/catchAsync.js";
 import { uploadOnCloudinary } from "../utils/commonMethod.js";
+import {
+  sendNotification,
+  sendNotifications,
+} from "../utils/notification.js";
+import sendResponse from "../utils/sendResponse.js";
 
 export const applyToJob = catchAsync(async (req, res, next) => {
   const { jobId } = req.params;
@@ -11,6 +15,12 @@ export const applyToJob = catchAsync(async (req, res, next) => {
 
   const job = await Job.findById(jobId);
   if (!job) return next(new AppError(404, "Job not found"));
+  const appliedBefore = await Application.findOne({
+    jobId,
+    tradespersonId: req.user._id,
+  });
+  if (appliedBefore)
+    return next(new AppError(400, "You have already applied to this job"));
 
   const app = await Application.create({
     jobId: job._id,
@@ -33,6 +43,17 @@ export const applyToJob = catchAsync(async (req, res, next) => {
     app.relatedFiles = relatedFiles;
     await app.save();
   }
+  await sendNotification({
+    userId: job.userId,
+    title: "New job application",
+    message: `${req.user.name || "A tradesperson"} applied to "${job.title}".`,
+    type: "job_application",
+    data: {
+      applicationId: app._id,
+      jobId: job._id,
+      tradespersonId: req.user._id,
+    },
+  });
 
   sendResponse(res, {
     statusCode: 201,
@@ -77,6 +98,17 @@ export const updateApplicationPending = catchAsync(async (req, res, next) => {
     app.relatedFiles = relatedFiles;
     await app.save();
   }
+  await sendNotification({
+    userId: app.userId,
+    title: "Application updated",
+    message: `${req.user.name || "A tradesperson"} updated an application.`,
+    type: "application_updated",
+    data: {
+      applicationId: app._id,
+      jobId: app.jobId,
+      tradespersonId: app.tradespersonId,
+    },
+  });
 
   sendResponse(res, {
     statusCode: 200,
@@ -125,6 +157,17 @@ export const userDecision = catchAsync(async (req, res, next) => {
   if (action === "decline") {
     app.status = "lost";
     await app.save();
+    await sendNotification({
+      userId: app.tradespersonId,
+      title: "Application declined",
+      message: `Your application for "${job.title}" was declined.`,
+      type: "application_declined",
+      data: {
+        applicationId: app._id,
+        jobId: job._id,
+      },
+    });
+
     return sendResponse(res, {
       statusCode: 200,
       success: true,
@@ -134,6 +177,12 @@ export const userDecision = catchAsync(async (req, res, next) => {
   }
 
   if (action === "accept") {
+    const otherPendingApplications = await Application.find({
+      jobId: job._id,
+      _id: { $ne: app._id },
+      status: "pending",
+    }).select("_id tradespersonId");
+
     // set this application active, others lost, job awarded
     await Application.updateMany(
       { jobId: job._id, _id: { $ne: app._id }, status: "pending" },
@@ -145,6 +194,27 @@ export const userDecision = catchAsync(async (req, res, next) => {
     job.status = "awarded";
     job.tradePerson = app.tradespersonId;
     await job.save();
+    await sendNotification({
+      userId: app.tradespersonId,
+      title: "Application accepted",
+      message: `Your application for "${job.title}" was accepted.`,
+      type: "application_accepted",
+      data: {
+        applicationId: app._id,
+        jobId: job._id,
+      },
+    });
+    await sendNotifications(
+      otherPendingApplications.map((item) => item.tradespersonId),
+      {
+        title: "Application closed",
+        message: `The job "${job.title}" was awarded to another tradesperson.`,
+        type: "application_lost",
+        data: {
+          jobId: job._id,
+        },
+      },
+    );
 
     return sendResponse(res, {
       statusCode: 200,

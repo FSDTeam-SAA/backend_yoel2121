@@ -85,6 +85,7 @@ const schema = new mongoose.Schema(
         "cancelled",
         "inactive",
         "moderated_by_admin",
+        "awarded",
       ],
       default: "pending",
       index: true,
