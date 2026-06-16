@@ -1,22 +1,23 @@
 import httpStatus from "http-status";
-import { User } from "../model/user.model.js";
-import { uploadOnCloudinary } from "../utils/commonMethod.js";
+import mongoose from "mongoose";
 import AppError from "../errors/AppError.js";
-import sendResponse from "../utils/sendResponse.js";
-import catchAsync from "../utils/catchAsync.js";
 import { Category } from "../model/category.model.js";
 import { Review } from "../model/review.model.js";
+import { User } from "../model/user.model.js";
+import catchAsync from "../utils/catchAsync.js";
+import { uploadOnCloudinary } from "../utils/commonMethod.js";
+import sendResponse from "../utils/sendResponse.js";
 
 export const getProfile = catchAsync(async (req, res, next) => {
   const userId = req.user._id;
 
   const u = await User.findById(userId)
     .select(
-      "name profileImage bio serviceArea nationality address phone operatingTrades ratingSummary externalRatings externalReviewLinks role userLocation",
+      "name email profileImage bio serviceArea nationality address phone operatingTrades ratingSummary externalRatings externalReviewLinks role userLocation",
     )
     .populate("operatingTrades", "name status");
 
-  const tradiesReview = await Review.findOne({ tradespersonId: userId })
+  const tradiesReview = await Review.findOne({ revieweeId: userId })
     .sort({ createdAt: -1 })
     .populate("userId", "name profileImage")
     .lean();
@@ -36,7 +37,7 @@ export const getTradespersonProfile = catchAsync(async (req, res, next) => {
   const { tradespersonId } = req.params;
   const u = await User.findById(tradespersonId)
     .select(
-      "name profileImage bio serviceArea operatingTrades ratingSummary externalRatings externalReviewLinks role userLocation",
+      "name email phone profileImage bio serviceArea operatingTrades ratingSummary externalRatings externalReviewLinks role userLocation address",
     )
     .populate("operatingTrades", "name status");
 
@@ -54,11 +55,30 @@ export const getTradespersonProfile = catchAsync(async (req, res, next) => {
   });
 });
 
+export const getCurrentLocation = catchAsync(async (req, res, next) => {
+  const user = await User.findById(req.user._id).select(
+    "name role address serviceArea userLocation",
+  );
+
+  if (!user) return next(new AppError(404, "User not found"));
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Current location fetched successfully",
+    data: {
+      address: user.address,
+      serviceArea: user.serviceArea,
+      userLocation: user.userLocation,
+    },
+  });
+});
+
 export const userLocationUpdate = catchAsync(async (req, res, next) => {
-  const { latitude, longitude } = req.body;
+  const { latitude, longitude,address } = req.body;
 
   const user = await User.findById(req.user._id);
-
+  user.address = address || user.address;
   user.userLocation =
     longitude && latitude
       ? { type: "Point", coordinates: [Number(longitude), Number(latitude)] }
