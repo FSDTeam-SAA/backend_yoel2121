@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "8e2f9f36-7a0f-4f8b-9b6c-5d1d5a5b3d3a",
     "name": "backend_yoel2121 API",
-    "description": "Postman collection for the backend_yoel2121 API. Update `baseUrl` and `accessToken` variables after import. Protected routes use `Authorization: Bearer {{accessToken}}`.",
+    "description": "Postman collection for the backend_yoel2121 API. Update `baseUrl`, `accessToken`, `refreshToken`, and ID variables after import. Protected routes use `Authorization: Bearer {{accessToken}}`. Multipart routes use form-data for file upload fields. Secrets from `.env` are intentionally not included.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -51,7 +51,21 @@
               }
             },
             "url": "{{baseUrl}}/{{apiPrefix}}/auth/login"
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json?.data?.accessToken) pm.collectionVariables.set('accessToken', json.data.accessToken);",
+                  "if (json?.data?.refreshToken) pm.collectionVariables.set('refreshToken', json.data.refreshToken);",
+                  "if (json?.data?._id) pm.collectionVariables.set('userId', json.data._id);"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Verify Email OTP",
@@ -193,7 +207,20 @@
               }
             },
             "url": "{{baseUrl}}/{{apiPrefix}}/auth/refresh-token"
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json?.data?.accessToken) pm.collectionVariables.set('accessToken', json.data.accessToken);",
+                  "if (json?.data?.refreshToken) pm.collectionVariables.set('refreshToken', json.data.refreshToken);"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Logout",
@@ -366,12 +393,12 @@
                 },
                 {
                   "key": "externalReviewLinks",
-                  "value": "[\"https://example.com/review/1\"]",
+                  "value": "{\"google\":\"https://example.com/google-review\",\"trustTrader\":\"https://example.com/trust-trader-review\"}",
                   "type": "text"
                 },
                 {
                   "key": "externalRatings",
-                  "value": "[{\"platform\":\"Google\",\"rating\":4.8}]",
+                  "value": "{\"google\":4.8,\"trustTrader\":4.6}",
                   "type": "text"
                 },
                 {
@@ -610,6 +637,43 @@
           }
         },
         {
+          "name": "Create Category",
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "name",
+                  "value": "plumbing",
+                  "type": "text"
+                },
+                {
+                  "key": "status",
+                  "value": "approved",
+                  "type": "text"
+                },
+                {
+                  "key": "image",
+                  "src": "",
+                  "type": "file"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/{{apiPrefix}}/admin/categories"
+          }
+        },
+        {
           "name": "Update Category",
           "request": {
             "method": "PATCH",
@@ -623,20 +687,25 @@
                 }
               ]
             },
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
             "body": {
-              "mode": "raw",
-              "raw": "{\n  \"status\": \"approved\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "name",
+                  "value": "plumbing",
+                  "type": "text"
+                },
+                {
+                  "key": "status",
+                  "value": "approved",
+                  "type": "text"
+                },
+                {
+                  "key": "image",
+                  "src": "",
+                  "type": "file"
                 }
-              }
+              ]
             },
             "url": "{{baseUrl}}/{{apiPrefix}}/admin/categories/{{categoryId}}"
           }
@@ -971,7 +1040,7 @@
                 }
               }
             },
-            "url": "{{baseUrl}}/{{apiPrefix}}/jobs/{{jobId}}"
+            "url": "{{baseUrl}}/{{apiPrefix}}/jobs/{{jobId}}/status"
           }
         },
         {
@@ -1419,6 +1488,79 @@
           }
         }
       ]
+    },
+    {
+      "name": "Notifications",
+      "item": [
+        {
+          "name": "List My Notifications",
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/{{apiPrefix}}/notifications?page={{page}}&limit={{limit}}&isRead=false"
+          }
+        },
+        {
+          "name": "Unread Notification Count",
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/{{apiPrefix}}/notifications/unread-count"
+          }
+        },
+        {
+          "name": "Mark Notification Read",
+          "request": {
+            "method": "PATCH",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/{{apiPrefix}}/notifications/{{notificationId}}/read"
+          }
+        },
+        {
+          "name": "Mark All Notifications Read",
+          "request": {
+            "method": "PATCH",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/{{apiPrefix}}/notifications/read-all"
+          }
+        }
+      ]
     }
   ],
   "variable": [
@@ -1465,6 +1607,10 @@
     {
       "key": "reviewId",
       "value": "YOUR_REVIEW_ID"
+    },
+    {
+      "key": "notificationId",
+      "value": "YOUR_NOTIFICATION_ID"
     },
     {
       "key": "categoryId",

@@ -1,23 +1,22 @@
 import { Router } from "express";
 import {
+  allApplications,
   approveEditRejectReview,
   approveRejectUser,
+  createCategory,
   deleteCategory,
   deleteUser,
   getAdminOverview,
+  getApplicationDetailsAdmin,
+  getReviewDetailsAdmin,
   listCategories,
   listReviews,
   listUsers,
   moderateJob,
   updateCategory,
-  getReviewDetailsAdmin,
-  allApplications,
-  getApplicationDetailsAdmin,
 } from "../controller/admin.controller.js";
 import { protect } from "../middleware/auth.middleware.js";
-import { createRequire } from 'module';
-
-const require = createRequire(import.meta.url);
+import upload from "../middleware/multer.middleware.js";
 
 const router = Router();
 
@@ -33,12 +32,17 @@ router.get("/reviews", protect, listReviews);
 router.get("/reviews/:reviewId", protect, getReviewDetailsAdmin);
 router.patch("/reviews/:reviewId", protect, approveEditRejectReview);
 
-
 router.get("/categories", listCategories);
-router.patch("/categories/:categoryId", protect, updateCategory);
+router.post("/categories", protect, upload.single("image"), createCategory);
+router.patch(
+  "/categories/:categoryId",
+  protect,
+  upload.single("image"),
+  updateCategory,
+);
 router.delete("/categories/:categoryId", protect, deleteCategory);
 
 router.get("/applications", protect, allApplications);
 router.get("/applications/:applicationId", protect, getApplicationDetailsAdmin);
 
-export default router;   
+export default router;

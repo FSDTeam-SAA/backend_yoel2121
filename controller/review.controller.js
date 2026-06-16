@@ -2,8 +2,10 @@ import catchAsync from "../utils/catchAsync.js";
 import sendResponse from "../utils/sendResponse.js";
 import { Review } from "../model/review.model.js";
 import { Job } from "../model/job.model.js";
+import { User } from "../model/user.model.js";
 import AppError from "../errors/AppError.js";
 import { uploadOnCloudinary } from "../utils/commonMethod.js";
+import { notifyAdmins, sendNotification } from "../utils/notification.js";
 
 export const submitJobReview = catchAsync(async (req, res, next) => {
   const { jobId } = req.params;
@@ -12,17 +14,31 @@ export const submitJobReview = catchAsync(async (req, res, next) => {
   const job = await Job.findById(jobId);
   if (!job) return next(new AppError(404, "Job not found"));
 
-  if (String(job.userId) !== String(req.user._id))
-    return next(new AppError(403, "Home owner only"));
+  const isHomeowner = String(job.userId) === String(req.user._id);
+  const isTradesperson =
+    job.tradePerson && String(job.tradePerson) === String(req.user._id);
 
-  const tradespersonId = req.body.tradespersonId;
+  if (!isHomeowner && !isTradesperson)
+    return next(
+      new AppError(403, "Only the job owner or assigned tradesperson can review"),
+    );
+
+  const reviewerRole = isHomeowner ? "user" : "tradesperson";
+  const tradespersonId = isHomeowner
+    ? req.body.tradespersonId || job.tradePerson
+    : req.user._id;
+
   if (!tradespersonId)
     return next(new AppError(400, "tradespersonId required"));
+
+  const revieweeId = isHomeowner ? tradespersonId : job.userId;
 
   const review = await Review.create({
     jobId: job._id,
     userId: req.user._id,
     tradespersonId,
+    revieweeId,
+    reviewerRole,
     stars,
     text: text || "",
   });
@@ -42,10 +58,15 @@ export const submitJobReview = catchAsync(async (req, res, next) => {
   await review.save();
 
   const stats = await Review.aggregate([
-    { $match: { tradespersonId: review.tradespersonId } },
+    {
+      $match: {
+        revieweeId: review.revieweeId,
+        status: { $in: ["approved", "edited"] },
+      },
+    },
     {
       $group: {
-        _id: "$tradespersonId",
+        _id: "$revieweeId",
         avg: { $avg: "$stars" },
         count: { $sum: 1 },
       },
@@ -53,13 +74,34 @@ export const submitJobReview = catchAsync(async (req, res, next) => {
   ]);
 
   if (stats.length > 0) {
-    await User.findByIdAndUpdate(review.tradespersonId, {
+    await User.findByIdAndUpdate(review.revieweeId, {
       ratingSummary: {
         avg: Number(stats[0].avg.toFixed(2)),
         count: stats[0].count,
       },
     });
   }
+  await sendNotification({
+    userId: revieweeId,
+    title: "New review received",
+    message: `You received a ${stars}-star review.`,
+    type: "review_submitted",
+    data: {
+      reviewId: review._id,
+      jobId: job._id,
+      userId: req.user._id,
+    },
+  });
+  await notifyAdmins({
+    title: "New review submitted",
+    message: `${req.user.name || "A user"} submitted a review for moderation.`,
+    type: "review_submitted_admin",
+    data: {
+      reviewId: review._id,
+      jobId: job._id,
+      revieweeId,
+    },
+  });
 
   sendResponse(res, {
     statusCode: 201,
@@ -72,7 +114,8 @@ export const submitJobReview = catchAsync(async (req, res, next) => {
 export const listTradespersonReviewsPublic = catchAsync(async (req, res) => {
   const { tradespersonId } = req.params;
   const reviews = await Review.find({
-    tradespersonId,
+    revieweeId: tradespersonId,
+    status: { $in: ["approved", "edited"] },
   })
     .sort({ createdAt: -1 })
     .limit(50);
@@ -85,9 +128,10 @@ export const listTradespersonReviewsPublic = catchAsync(async (req, res) => {
 });
 
 export const listReviews = catchAsync(async (req, res) => {
-  const { status } = req.query;
+  const { status, reviewerRole } = req.query;
   const filter = {};
   if (status) filter.status = status;
+  if (reviewerRole) filter.reviewerRole = reviewerRole;
   const reviews = await Review.find(filter).sort({ createdAt: -1 });
   sendResponse(res, {
     statusCode: 200,

@@ -5,6 +5,7 @@ import catchAsync from "../utils/catchAsync.js";
 import { generateOTP } from "../utils/commonMethod.js";
 import { sendEmail } from "../utils/sendEmail.js";
 import sendResponse from "../utils/sendResponse.js";
+import { notifyAdmins } from "../utils/notification.js";
 import { User } from "./../model/user.model.js";
 
 const generateVerificationCode = () => {
@@ -90,6 +91,16 @@ export const register = catchAsync(async (req, res, next) => {
     console.log(err);
     return next(new AppError(500, "Failed to send OTP email"));
   }
+  await notifyAdmins({
+    title: "New account registered",
+    message: `${user.name || user.email} registered as ${user.role}.`,
+    type: "user_registered",
+    data: {
+      userId: user._id,
+      role: user.role,
+      accountStatus: user.accountStatus,
+    },
+  });
 
   sendResponse(res, {
     statusCode: 201,
@@ -571,7 +582,9 @@ export const changePassword = catchAsync(async (req, res) => {
     statusCode: httpStatus.OK,
     success: true,
     message: "Password changed",
-    data: "",
+    data:{
+      status: "success"
+    },
   });
 });
 
