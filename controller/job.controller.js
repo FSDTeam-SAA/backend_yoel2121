@@ -385,6 +385,12 @@ export const updateJobProgress = catchAsync(async (req, res, next) => {
     );
   }
 
+  if (Number(progressStage) === 1 && job.paymentStatus !== "paid") {
+    return next(
+      new AppError(402, "Payment of $10 is required before starting this job"),
+    );
+  }
+
   job.progressStage = Number(progressStage);
 
   if (Number(progressStage) === 1) {
