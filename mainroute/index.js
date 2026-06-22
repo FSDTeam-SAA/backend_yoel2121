@@ -10,6 +10,7 @@ import messageRoutes from "../route/message.route.js";
 import reviewRoutes from "../route/review.route.js";
 import userRoutes from "../route/user.route.js";
 import notificationRoutes from "../route/notification.route.js";
+import paymentRoutes from "../route/payment.route.js";
 
 const router = Router();
 
@@ -23,5 +24,6 @@ router.use("/conversations", conversationRoutes);
 router.use("/messages", messageRoutes);
 router.use("/reviews", reviewRoutes);
 router.use("/notifications", notificationRoutes);
+router.use("/payments", paymentRoutes);
 
 export default router;

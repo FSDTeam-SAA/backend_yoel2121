@@ -92,6 +92,19 @@ const schema = new mongoose.Schema(
     },
 
     moderatedByAdmin: { type: Boolean, default: false },
+
+    paymentStatus: {
+      type: String,
+      enum: ["unpaid", "paid"],
+      default: "unpaid",
+      index: true,
+    },
+
+    paymentId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Payment",
+      default: null,
+    },
   },
   { timestamps: true },
 );
