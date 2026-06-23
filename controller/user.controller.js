@@ -13,7 +13,7 @@ export const getProfile = catchAsync(async (req, res, next) => {
 
   const u = await User.findById(userId)
     .select(
-      "name email profileImage bio serviceArea nationality address phone operatingTrades ratingSummary externalRatings externalReviewLinks role userLocation",
+      "name email profileImage bio serviceArea nationality address phone operatingTrades ratingSummary externalRatings externalReviewLinks role userLocation isKycVerified",
     )
     .populate("operatingTrades", "name status");
 
