@@ -26,6 +26,7 @@ const userSchema = new mongoose.Schema(
     address: { type: String, default: "" },
 
     isEmailVerified: { type: Boolean, default: false },
+    isKycVerified: { type: Boolean, default: false },
     emailVerificationOTP: { type: String, default: null },
     emailVerificationOTPExpiry: { type: Date, default: null },
 
