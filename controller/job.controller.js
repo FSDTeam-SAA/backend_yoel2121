@@ -373,6 +373,33 @@ export const getTradespersonJobFeed = catchAsync(async (req, res) => {
   });
 });
 
+// Public: recent 5 completed jobs for a given tradesperson
+export const getRecentJobs = catchAsync(async (req, res, next) => {
+  const { tradespersonId } = req.params;
+
+  const tradesperson = await User.findById(tradespersonId).select("role");
+  if (!tradesperson || tradesperson.role !== "tradesperson")
+    return next(new AppError(404, "Tradesperson not found"));
+
+  const recentJobs = await Job.find({
+    tradePerson: tradespersonId,
+    status: "completed",
+  })
+    .sort({ completedAt: -1 })
+    .limit(5)
+    .select(
+      "title description budget locationText media completedAt categoryId",
+    )
+    .populate("categoryId", "name");
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Recent completed jobs fetched successfully",
+    data: recentJobs,
+  });
+});
+
 export const updateJobProgress = catchAsync(async (req, res, next) => {
   const { progressStage } = req.body;
 
