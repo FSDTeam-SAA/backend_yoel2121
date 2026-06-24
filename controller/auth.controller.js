@@ -7,6 +7,7 @@ import { sendEmail } from "../utils/sendEmail.js";
 import sendResponse from "../utils/sendResponse.js";
 import { notifyAdmins } from "../utils/notification.js";
 import { User } from "./../model/user.model.js";
+import verifyGoogleToken from "../utils/verifyGoogleToken.js";
 
 const generateVerificationCode = () => {
   return Math.floor(1000 + Math.random() * 9000);
@@ -625,6 +626,93 @@ export const refreshToken = catchAsync(async (req, res) => {
     success: true,
     message: "Token refreshed successfully",
     data: { accessToken: accessToken, refreshToken: refreshToken1 },
+  });
+});
+
+export const googleLogin = catchAsync(async (req, res, next) => {
+  const { idToken } = req.body;
+
+  if (!idToken) {
+    return next(new AppError(400, "idToken is required"));
+  }
+
+  let googleUser;
+  try {
+    googleUser = await verifyGoogleToken(idToken);
+  } catch {
+    return next(new AppError(401, "Invalid Google token"));
+  }
+
+  let user = await User.findOne({ email: googleUser.email });
+
+  if (!user) {
+    user = await User.create({
+      name: googleUser.name,
+      email: googleUser.email,
+      profileImage: { url: googleUser.picture || "", public_id: "" },
+      role: "homeowner",
+      isEmailVerified: true,
+      accountStatus: "pending",
+      googleId: googleUser.googleId,
+      provider: "google",
+    });
+
+    await notifyAdmins({
+      title: "New account registered",
+      message: `${user.name || user.email} registered via Google as ${user.role}.`,
+      type: "user_registered",
+      data: { userId: user._id, role: user.role, accountStatus: user.accountStatus },
+    });
+  }
+
+  if (
+    user.accountStatus === "suspended" ||
+    user.accountStatus === "rejected" ||
+    user.accountStatus === "pending"
+  ) {
+    return sendResponse(res, {
+      statusCode: httpStatus.FORBIDDEN,
+      success: false,
+      message: "Account is suspended, rejected, or pending approval.",
+      data: { email: user.email },
+    });
+  }
+
+  const jwtPayload = { _id: user._id, email: user.email, role: user.role };
+
+  const accessToken = createToken(
+    jwtPayload,
+    process.env.JWT_ACCESS_SECRET,
+    process.env.JWT_ACCESS_EXPIRES_IN,
+  );
+
+  const refreshToken = createToken(
+    jwtPayload,
+    process.env.JWT_REFRESH_SECRET,
+    process.env.JWT_REFRESH_EXPIRES_IN,
+  );
+
+  user.refreshToken = refreshToken;
+  await user.save();
+
+  res.cookie("refreshToken", refreshToken, {
+    secure: true,
+    httpOnly: true,
+    sameSite: "none",
+    maxAge: 1000 * 60 * 60 * 24 * 365,
+  });
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: "Google login successful",
+    data: {
+      accessToken,
+      refreshToken,
+      role: user.role,
+      _id: user._id,
+      user,
+    },
   });
 });
 
