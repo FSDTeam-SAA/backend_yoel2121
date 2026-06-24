@@ -10,6 +10,7 @@ import {
   getCurrentJobs,
   getTradespersonJobFeed,
   updateJobProgress,
+  getRecentJobs,
 } from "../controller/job.controller.js";
 import { protect } from "../middleware/auth.middleware.js";
 import upload from "../middleware/multer.middleware.js";
@@ -23,6 +24,9 @@ router.patch("/:jobId", protect, upload.array("files", 10), updateJob);
 router.get("/current-jobs", protect, getCurrentJobs);
 // Tradesperson feed
 router.get("/near-you", protect, listJobsNearYou);
+
+// Public: recent completed jobs for a tradesperson
+router.get("/tradesperson/:tradespersonId/recent", getRecentJobs);
 
 // Public details
 router.get("/:jobId", getJobDetails);
