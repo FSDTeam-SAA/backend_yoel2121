@@ -65,7 +65,7 @@ export const register = catchAsync(async (req, res, next) => {
     address,
     role,
     isEmailVerified: false,
-    status: role === "user" ? "pending" : undefined,
+    status: (role === "user" || role === "homeowner") ? "pending" : undefined,
     userLocation:
       longitude && latitude
         ? { type: "Point", coordinates: [Number(longitude), Number(latitude)] }
@@ -106,7 +106,7 @@ export const register = catchAsync(async (req, res, next) => {
     statusCode: 201,
     success: true,
     message:
-      role === "user"
+      (role === "user" || role === "homeowner")
         ? "Registration successful. Please verify your email with the OTP sent & wait for admin approval."
         : "Registration successful. Please verify your email with the OTP sent.",
     data: {
@@ -497,7 +497,7 @@ export const verifyOTP = catchAsync(async (req, res, next) => {
   user.emailVerificationOTP = undefined;
   user.emailVerificationOTPExpiry = undefined;
   user.isEmailVerified = true;
-  user.accountStatus = user.role === "user" ? "pending" : "approved";
+  user.accountStatus = (user.role === "user" || user.role === "homeowner") ? "pending" : "approved";
   await user.save();
 
   sendResponse(res, {
