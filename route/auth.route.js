@@ -2,6 +2,7 @@ import express from "express";
 import {
   changePassword,
   forgetPassword,
+  googleLogin,
   login,
   logout,
   refreshToken,
@@ -15,6 +16,7 @@ import { protect } from "../middleware/auth.middleware.js";
 
 const router = express.Router();
 
+router.post("/google", googleLogin);
 router.post("/register", register);
 router.post("/login", login);
 router.post("/verify", verifyOTP);
