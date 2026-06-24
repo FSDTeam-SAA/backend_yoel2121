@@ -8,6 +8,8 @@ import catchAsync from "../utils/catchAsync.js";
 import { uploadOnCloudinary } from "../utils/commonMethod.js";
 import sendResponse from "../utils/sendResponse.js";
 
+const DIDIT_BASE_URL = "https://verification.didit.me";
+
 export const getProfile = catchAsync(async (req, res, next) => {
   const userId = req.user._id;
 
@@ -310,6 +312,40 @@ export const servicesNearYou = catchAsync(async (req, res) => {
       limit: limitNum,
       total,
       totalPages: Math.ceil(total / limitNum),
+    },
+  });
+});
+
+export const createKycSession = catchAsync(async (req, res, next) => {
+  if (req.user.role !== "tradesperson") {
+    return next(new AppError(httpStatus.FORBIDDEN, "Only tradespersons can submit KYC"));
+  }
+
+  const diditRes = await fetch(`${DIDIT_BASE_URL}/v3/session/`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": process.env.DIDIT_API_KEY,
+    },
+    body: JSON.stringify({
+      workflow_id: process.env.DIDIT_WORKFLOW_ID,
+      vendor_data: String(req.user._id),
+    }),
+  });
+
+  const data = await diditRes.json();
+
+  if (!diditRes.ok) {
+    return next(new AppError(httpStatus.BAD_GATEWAY, data?.detail || "Failed to create KYC session"));
+  }
+
+  sendResponse(res, {
+    statusCode: httpStatus.CREATED,
+    success: true,
+    message: "KYC session created",
+    data: {
+      session_id: data.session_id,
+      url: data.url,
     },
   });
 });
