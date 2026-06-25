@@ -636,6 +636,12 @@ export const googleLogin = catchAsync(async (req, res, next) => {
     return next(new AppError(400, "idToken is required"));
   }
 
+  const { role } = req.body;
+
+  if (!role || !["user", "tradesperson"].includes(role)) {
+    return next(new AppError(400, 'role is required and must be "user" or "tradesperson"'));
+  }
+
   let googleUser;
   try {
     googleUser = await verifyGoogleToken(idToken);
@@ -652,7 +658,7 @@ export const googleLogin = catchAsync(async (req, res, next) => {
       name: googleUser.name,
       email: googleUser.email,
       profileImage: { url: googleUser.picture || "", public_id: "" },
-      role: "homeowner",
+      role,
       isEmailVerified: true,
       accountStatus: "approved",
       googleId: googleUser.googleId,
