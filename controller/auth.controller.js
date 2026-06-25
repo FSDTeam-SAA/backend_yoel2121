@@ -644,15 +644,17 @@ export const googleLogin = catchAsync(async (req, res, next) => {
   }
 
   let user = await User.findOne({ email: googleUser.email });
+  let isNewUser = false;
 
   if (!user) {
+    isNewUser = true;
     user = await User.create({
       name: googleUser.name,
       email: googleUser.email,
       profileImage: { url: googleUser.picture || "", public_id: "" },
       role: "homeowner",
       isEmailVerified: true,
-      accountStatus: "pending",
+      accountStatus: "approved",
       googleId: googleUser.googleId,
       provider: "google",
     });
@@ -665,15 +667,12 @@ export const googleLogin = catchAsync(async (req, res, next) => {
     });
   }
 
-  if (
-    user.accountStatus === "suspended" ||
-    user.accountStatus === "rejected" ||
-    user.accountStatus === "pending"
-  ) {
+  // Hard block only for suspended/rejected — pending gets tokens so Flutter can handle UX
+  if (user.accountStatus === "suspended" || user.accountStatus === "rejected") {
     return sendResponse(res, {
       statusCode: httpStatus.FORBIDDEN,
       success: false,
-      message: "Account is suspended, rejected, or pending approval.",
+      message: `Your account has been ${user.accountStatus}.`,
       data: { email: user.email },
     });
   }
@@ -705,12 +704,14 @@ export const googleLogin = catchAsync(async (req, res, next) => {
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
-    message: "Google login successful",
+    message: isNewUser ? "Account created successfully." : "Google login successful",
     data: {
       accessToken,
       refreshToken,
       role: user.role,
       _id: user._id,
+      accountStatus: user.accountStatus,
+      isNewUser,
       user,
     },
   });
