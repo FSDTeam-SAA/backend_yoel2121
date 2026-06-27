@@ -400,6 +400,32 @@ export const getRecentJobs = catchAsync(async (req, res, next) => {
   });
 });
 
+export const deleteJob = catchAsync(async (req, res, next) => {
+  const { jobId } = req.params;
+
+  const job = await Job.findById(jobId);
+  if (!job) return next(new AppError(404, "Job not found"));
+
+  if (String(job.userId) !== String(req.user._id))
+    return next(new AppError(403, "Only the job owner can delete this job"));
+
+  const nonDeletableStatuses = ["started", "in_progress", "completed"];
+  if (nonDeletableStatuses.includes(job.status))
+    return next(
+      new AppError(400, `Cannot delete a job with status "${job.status}"`),
+    );
+
+  await Application.deleteMany({ jobId: job._id });
+  await job.deleteOne();
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Job deleted successfully",
+    data: null,
+  });
+});
+
 export const updateJobProgress = catchAsync(async (req, res, next) => {
   const { progressStage } = req.body;
 

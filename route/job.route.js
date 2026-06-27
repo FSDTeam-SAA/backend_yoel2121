@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   createJobPublic,
   updateJob,
+  deleteJob,
   getJobDetails,
   listApplicantsForJob,
   listJobsNearYou,
@@ -37,5 +38,6 @@ router.get("/me/user", protect, listMyJobsuser);
 router.get("/:jobId/applicants", protect, listApplicantsForJob);
 router.patch("/:jobId/status", protect, updateJobStatususer);
 router.patch("/:jobId/progress", protect, updateJobProgress);
+router.delete("/:jobId", protect, deleteJob);
 
 export default router;
