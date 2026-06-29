@@ -5,6 +5,7 @@ import { Message } from "../model/message.model.js";
 import { io } from "../server.js";
 import AppError from "../errors/AppError.js";
 import { sendNotifications } from "../utils/notification.js";
+import { containsPersonalContactInfo } from "../utils/contentFilter.js";
 
 export const listMessages = catchAsync(async (req, res, next) => {
   const { conversationId } = req.params;
@@ -36,6 +37,14 @@ export const sendMessage = catchAsync(async (req, res, next) => {
   if (!convo) return next(new AppError(404, "Conversation not found"));
   if (!convo.participants.some((p) => String(p) === String(req.user._id)))
     return next(new AppError(403, "Forbidden"));
+
+  if (containsPersonalContactInfo(text))
+    return next(
+      new AppError(
+        400,
+        "Sharing phone numbers, WhatsApp numbers, emails or other personal contact details is not allowed in messages."
+      )
+    );
 
   const msg = await Message.create({
     conversationId,
