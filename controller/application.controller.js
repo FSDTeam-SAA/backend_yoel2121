@@ -8,10 +8,17 @@ import {
   sendNotifications,
 } from "../utils/notification.js";
 import sendResponse from "../utils/sendResponse.js";
+import { containsPersonalContactInfo } from "../utils/contentFilter.js";
+
+const CONTACT_ERROR =
+  "Sharing personal contact details (phone, email, WhatsApp, social handles, etc.) violates platform policy. Please keep all communication on the platform.";
 
 export const applyToJob = catchAsync(async (req, res, next) => {
   const { jobId } = req.params;
   const { price, estimatedStartDate, additionalInfo } = req.body;
+
+  if (containsPersonalContactInfo(additionalInfo))
+    return next(new AppError(400, CONTACT_ERROR));
 
   const job = await Job.findById(jobId);
   if (!job) return next(new AppError(404, "Job not found"));
@@ -77,6 +84,9 @@ export const updateApplicationPending = catchAsync(async (req, res, next) => {
     return next(new AppError(400, "Only pending application can be edited"));
 
   const { price, estimatedStartDate, additionalInfo } = req.body;
+
+  if (containsPersonalContactInfo(additionalInfo))
+    return next(new AppError(400, CONTACT_ERROR));
 
   if (price !== undefined) app.price = Number(price);
 
