@@ -62,6 +62,8 @@ const userSchema = new mongoose.Schema(
 
     serviceArea: { type: String, default: "" },
 
+    preferredRadiusKm: { type: Number, default: 25 },
+
     password_reset_token: { type: String, default: "" },
 
     nationality: { type: String, default: "" },

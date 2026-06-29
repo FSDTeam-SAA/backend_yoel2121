@@ -15,7 +15,7 @@ export const getProfile = catchAsync(async (req, res, next) => {
 
   const u = await User.findById(userId)
     .select(
-      "name email profileImage bio serviceArea nationality address phone operatingTrades ratingSummary externalRatings externalReviewLinks role userLocation isKycVerified",
+      "name email profileImage bio serviceArea nationality address phone operatingTrades ratingSummary externalRatings externalReviewLinks role userLocation isKycVerified preferredRadiusKm",
     )
     .populate("operatingTrades", "name status");
 
@@ -106,6 +106,7 @@ export const updateProfile = catchAsync(async (req, res, next) => {
     "nationality",
     "externalReviewLinks",
     "externalRatings",
+    "preferredRadiusKm",
   ];
 
   const patch = {};
