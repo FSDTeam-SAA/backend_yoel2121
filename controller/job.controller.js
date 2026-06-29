@@ -10,11 +10,18 @@ import {
   sendNotifications,
 } from "../utils/notification.js";
 import sendResponse from "../utils/sendResponse.js";
+import { containsPersonalContactInfo } from "../utils/contentFilter.js";
+
+const CONTACT_ERROR =
+  "Sharing personal contact details (phone, email, WhatsApp, social handles, etc.) violates platform policy. Please keep all communication on the platform.";
 
 export const createJobPublic = catchAsync(async (req, res, next) => {
   const { title, description, budget, locationText, categoryId, lng, lat } =
     req.body;
   if (!title) return next(new AppError(400, "title required"));
+
+  if (containsPersonalContactInfo(title) || containsPersonalContactInfo(description))
+    return next(new AppError(400, CONTACT_ERROR));
 
   const job = await Job.create({
     userId: req.user._id,
@@ -99,6 +106,9 @@ export const updateJob = catchAsync(async (req, res, next) => {
     req.body;
   const previousStatus = job.status;
 
+  if (containsPersonalContactInfo(title) || containsPersonalContactInfo(description))
+    return next(new AppError(400, CONTACT_ERROR));
+
   if (title) job.title = title;
   if (description) job.description = description;
   if (locationText) job.locationText = locationText;
@@ -153,6 +163,14 @@ export const listJobsNearYou = catchAsync(async (req, res) => {
   const pageNum = Number(page);
   const limitNum = Number(limit);
 
+  const savedCoords = req.user.userLocation?.coordinates;
+  const resolvedLng = lng !== undefined ? Number(lng) : savedCoords?.[0];
+  const resolvedLat = lat !== undefined ? Number(lat) : savedCoords?.[1];
+  const resolvedRadius =
+    radiusKm !== undefined
+      ? Number(radiusKm)
+      : req.user.preferredRadiusKm ?? 25;
+
   const baseFilter = {
     userId: { $ne: req.user._id },
     visibility: "public",
@@ -164,19 +182,17 @@ export const listJobsNearYou = catchAsync(async (req, res) => {
   }
 
   if (q) {
-    if (q) {
-      baseFilter.$or = [
-        { title: { $regex: q, $options: "i" } },
-        { description: { $regex: q, $options: "i" } },
-      ];
-    }
+    baseFilter.$or = [
+      { title: { $regex: q, $options: "i" } },
+      { description: { $regex: q, $options: "i" } },
+    ];
   }
 
   const hasGeo =
-    lng !== undefined &&
-    lat !== undefined &&
-    !isNaN(Number(lng)) &&
-    !isNaN(Number(lat));
+    resolvedLng !== undefined &&
+    resolvedLat !== undefined &&
+    !isNaN(resolvedLng) &&
+    !isNaN(resolvedLat);
 
   const pipeline = [];
 
@@ -185,11 +201,11 @@ export const listJobsNearYou = catchAsync(async (req, res) => {
       $geoNear: {
         near: {
           type: "Point",
-          coordinates: [Number(lng), Number(lat)],
+          coordinates: [resolvedLng, resolvedLat],
         },
         distanceField: "distanceMeters",
         spherical: true,
-        maxDistance: Number(radiusKm) * 1000,
+        maxDistance: resolvedRadius * 1000,
         query: baseFilter,
       },
     });
