@@ -6,10 +6,17 @@ import { User } from "../model/user.model.js";
 import AppError from "../errors/AppError.js";
 import { uploadOnCloudinary } from "../utils/commonMethod.js";
 import { notifyAdmins, sendNotification } from "../utils/notification.js";
+import { containsPersonalContactInfo } from "../utils/contentFilter.js";
+
+const CONTACT_ERROR =
+  "Sharing personal contact details (phone, email, WhatsApp, social handles, etc.) violates platform policy. Please keep all communication on the platform.";
 
 export const submitJobReview = catchAsync(async (req, res, next) => {
   const { jobId } = req.params;
   const { stars, text } = req.body;
+
+  if (containsPersonalContactInfo(text))
+    return next(new AppError(400, CONTACT_ERROR));
 
   const job = await Job.findById(jobId);
   if (!job) return next(new AppError(404, "Job not found"));
