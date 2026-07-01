@@ -1,10 +1,48 @@
 import { Notification } from "../model/notification.model.js";
 import { User } from "../model/user.model.js";
+import { DeviceToken } from "../model/deviceToken.model.js";
 import { io } from "../server.js";
+import { getMessaging } from "./firebase.js";
 
 const uniqueIds = (ids) => [
   ...new Set(ids.filter(Boolean).map((id) => String(id))),
 ];
+
+const INVALID_TOKEN_ERRORS = new Set([
+  "messaging/registration-token-not-registered",
+  "messaging/invalid-registration-token",
+]);
+
+const sendPushToUser = async (userId, { title, message, type, data = {} }) => {
+  try {
+    const messaging = getMessaging();
+    if (!messaging) return;
+
+    const deviceTokens = await DeviceToken.find({ user: userId }).select("token");
+    if (!deviceTokens.length) return;
+
+    const tokens = deviceTokens.map((d) => d.token);
+    const stringData = Object.fromEntries(
+      Object.entries({ type, ...data }).map(([key, value]) => [key, String(value)])
+    );
+
+    const response = await messaging.sendEachForMulticast({
+      tokens,
+      notification: { title, body: message },
+      data: stringData,
+    });
+
+    const invalidTokens = response.responses
+      .map((r, i) => (!r.success && INVALID_TOKEN_ERRORS.has(r.error?.code) ? tokens[i] : null))
+      .filter(Boolean);
+
+    if (invalidTokens.length) {
+      await DeviceToken.deleteMany({ token: { $in: invalidTokens } });
+    }
+  } catch (error) {
+    console.error("Push notification error:", error);
+  }
+};
 
 export const emitUnreadNotificationCount = async (userId) => {
   const unreadCount = await Notification.countDocuments({
@@ -36,6 +74,7 @@ export const sendNotification = async ({
     });
 
     await emitNotification(String(userId), notification.toObject());
+    await sendPushToUser(userId, { title, message, type, data });
     return notification;
   } catch (error) {
     console.error("Notification error:", error);

@@ -9,6 +9,9 @@ import { Server } from "socket.io";
 
 import globalErrorHandler from "./middleware/globalErrorHandler.js";
 import notFound from "./middleware/notFound.js";
+import { initFirebase } from "./utils/firebase.js";
+
+initFirebase();
 
 const app = express();
 
