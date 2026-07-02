@@ -11,6 +11,7 @@ import {
 } from "../utils/notification.js";
 import sendResponse from "../utils/sendResponse.js";
 import { containsPersonalContactInfo } from "../utils/contentFilter.js";
+import { maskEmail, maskPhone } from "../utils/maskContact.js";
 
 const CONTACT_ERROR =
   "Sharing personal contact details (phone, email, WhatsApp, social handles, etc.) violates platform policy. Please keep all communication on the platform.";
@@ -273,6 +274,82 @@ export const getJobDetails = catchAsync(async (req, res, next) => {
     success: true,
     message: "Job details fetched",
     data: job,
+  });
+});
+
+// GET /jobs/:jobId/contact-status?tradespersonId=<id>
+// Tells the caller (tradesperson or job owner) whether the job is awarded
+// + paid, and returns the counterparty's phone/email, masked unless so.
+// - tradesperson caller: checked against job.tradePerson (must be them);
+//   counterparty is the job owner.
+// - job owner caller: must pass tradespersonId (which profile they're
+//   viewing — may not be job.tradePerson if the applicant isn't awarded
+//   yet), checked against job.tradePerson; counterparty is that tradesperson.
+export const getJobContactStatus = catchAsync(async (req, res, next) => {
+  const { jobId } = req.params;
+  const { tradespersonId } = req.query;
+
+  const job = await Job.findById(jobId).populate(
+    "userId",
+    "name email phone profileImage",
+  );
+  if (!job) return next(new AppError(404, "Job not found"));
+
+  const isTradesperson = req.user.role === "tradesperson";
+  let isAwarded = false;
+  let counterparty = null;
+
+  if (isTradesperson) {
+    isAwarded =
+      !!job.tradePerson && String(job.tradePerson) === String(req.user._id);
+    counterparty = job.userId;
+  } else {
+    if (String(job.userId._id) !== String(req.user._id))
+      return next(new AppError(403, "Home owner only"));
+
+    if (!tradespersonId)
+      return next(new AppError(400, "tradespersonId is required"));
+
+    const tradesperson = await User.findOne({
+      _id: tradespersonId,
+      role: "tradesperson",
+    }).select("name email phone profileImage");
+    if (!tradesperson)
+      return next(new AppError(404, "Tradesperson not found"));
+
+    isAwarded =
+      !!job.tradePerson && String(job.tradePerson) === String(tradespersonId);
+    counterparty = tradesperson;
+  }
+
+  const isPaid = job.paymentStatus === "paid";
+  const canViewContact = isAwarded && isPaid;
+
+  const contact = counterparty
+    ? {
+        _id: counterparty._id,
+        name: counterparty.name,
+        profileImage: counterparty.profileImage,
+        phone: canViewContact
+          ? counterparty.phone
+          : maskPhone(counterparty.phone),
+        email: canViewContact
+          ? counterparty.email
+          : maskEmail(counterparty.email),
+      }
+    : null;
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Job contact status fetched",
+    data: {
+      jobId: job._id,
+      isAwarded,
+      isPaid,
+      canViewContact,
+      contact,
+    },
   });
 });
 
