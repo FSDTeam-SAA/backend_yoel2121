@@ -26,3 +26,10 @@ export const requireApprovedAccount = () => (req, res, next) => {
   }
   next();
 };
+
+export const requireAdmin = (req, res, next) => {
+  if (req.user?.role !== "admin") {
+    return next(new AppError(403, "Admin access required"));
+  }
+  next();
+};

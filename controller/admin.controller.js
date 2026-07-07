@@ -4,6 +4,7 @@ import { User } from "../model/user.model.js";
 import { Job } from "../model/job.model.js";
 import { Review } from "../model/review.model.js";
 import { Category } from "../model/category.model.js";
+import { Carousel } from "../model/carousel.model.js";
 import AppError from "../errors/AppError.js";
 import { Application } from "../model/application.model.js";
 import { uploadOnCloudinary } from "../utils/commonMethod.js";
@@ -466,5 +467,136 @@ export const getApplicationDetailsAdmin = catchAsync(async (req, res, next) => {
     success: true,
     message: "Application fetched",
     data: application,
+  });
+});
+
+export const listCarouselsAdmin = catchAsync(async (req, res) => {
+  const { type, isActive } = req.query;
+  const filter = {};
+  if (type) filter.type = type;
+  if (isActive !== undefined) filter.isActive = isActive === "true";
+
+  const items = await Carousel.find(filter).sort({ order: 1, createdAt: -1 });
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Carousel items fetched",
+    data: items,
+  });
+});
+
+export const createCarouselItem = catchAsync(async (req, res, next) => {
+  const { type, title, subtitle, link, discountPercentage, order, isActive } =
+    req.body;
+
+  if (!type || !["ad", "coupon"].includes(type)) {
+    return next(new AppError(400, "Type must be 'ad' or 'coupon'"));
+  }
+  if (!title) return next(new AppError(400, "Title required"));
+  if (!subtitle) return next(new AppError(400, "Subtitle required"));
+  if (!req.file) return next(new AppError(400, "Image required"));
+
+  if (type === "coupon") {
+    if (discountPercentage === undefined || discountPercentage === null) {
+      return next(new AppError(400, "discountPercentage required"));
+    }
+    if (discountPercentage < 0 || discountPercentage > 100) {
+      return next(
+        new AppError(400, "discountPercentage must be between 0 and 100"),
+      );
+    }
+  }
+
+  const upload = await uploadOnCloudinary(req.file.buffer);
+
+  const item = await Carousel.create({
+    type,
+    title: title.trim(),
+    subtitle: subtitle.trim(),
+    link: link?.trim() || "",
+    image: {
+      public_id: upload.public_id,
+      url: upload.secure_url,
+    },
+    discountPercentage: type === "coupon" ? discountPercentage : null,
+    order: order !== undefined ? order : 0,
+    isActive: isActive !== undefined ? isActive : true,
+  });
+
+  sendResponse(res, {
+    statusCode: 201,
+    success: true,
+    message: "Carousel item created",
+    data: item,
+  });
+});
+
+export const updateCarouselItem = catchAsync(async (req, res, next) => {
+  const { carouselId } = req.params;
+  const { type, title, subtitle, link, discountPercentage, order, isActive } =
+    req.body;
+
+  const item = await Carousel.findById(carouselId);
+  if (!item) return next(new AppError(404, "Carousel item not found"));
+
+  if (type && !["ad", "coupon"].includes(type)) {
+    return next(new AppError(400, "Type must be 'ad' or 'coupon'"));
+  }
+  const nextType = type || item.type;
+
+  if (nextType === "coupon") {
+    const nextDiscountPercentage =
+      discountPercentage !== undefined
+        ? discountPercentage
+        : item.discountPercentage;
+
+    if (nextDiscountPercentage === undefined || nextDiscountPercentage === null) {
+      return next(new AppError(400, "discountPercentage required"));
+    }
+    if (nextDiscountPercentage < 0 || nextDiscountPercentage > 100) {
+      return next(
+        new AppError(400, "discountPercentage must be between 0 and 100"),
+      );
+    }
+    item.discountPercentage = nextDiscountPercentage;
+  } else if (nextType === "ad") {
+    item.discountPercentage = null;
+  }
+
+  item.type = nextType;
+  if (title) item.title = title.trim();
+  if (subtitle) item.subtitle = subtitle.trim();
+  if (link !== undefined) item.link = link.trim();
+  if (order !== undefined) item.order = order;
+  if (isActive !== undefined) item.isActive = isActive;
+
+  if (req.file) {
+    const upload = await uploadOnCloudinary(req.file.buffer);
+    item.image = {
+      public_id: upload.public_id,
+      url: upload.secure_url,
+    };
+  }
+
+  await item.save();
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Carousel item updated",
+    data: item,
+  });
+});
+
+export const deleteCarouselItem = catchAsync(async (req, res, next) => {
+  const { carouselId } = req.params;
+  const item = await Carousel.findByIdAndDelete(carouselId);
+  if (!item) return next(new AppError(404, "Carousel item not found"));
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Carousel item deleted",
+    data: {},
   });
 });
