@@ -40,6 +40,27 @@ const updateUserRatingSummary = async (revieweeId) => {
   });
 };
 
+const parseOptionalNumber = (value, fallback = 0) => {
+  if (value === undefined || value === null || value === "") return fallback;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const parseOptionalBoolean = (value, fallback = true) => {
+  if (value === undefined || value === null || value === "") return fallback;
+  if (typeof value === "boolean") return value;
+  return String(value).toLowerCase() === "true";
+};
+
+const uploadCarouselImage = async (fileBuffer) => {
+  try {
+    return await uploadOnCloudinary(fileBuffer);
+  } catch (error) {
+    console.error("Carousel image upload failed:", error);
+    throw new AppError(502, "Carousel image upload failed");
+  }
+};
+
 export const listUsers = catchAsync(async (req, res) => {
   const { role, status, q } = req.query;
   const filter = {};
@@ -488,6 +509,12 @@ export const listCarouselsAdmin = catchAsync(async (req, res) => {
 export const createCarouselItem = catchAsync(async (req, res, next) => {
   const { type, title, subtitle, link, discountPercentage, order, isActive } =
     req.body;
+  const parsedDiscountPercentage = parseOptionalNumber(
+    discountPercentage,
+    null,
+  );
+  const parsedOrder = parseOptionalNumber(order, 0);
+  const parsedIsActive = parseOptionalBoolean(isActive, true);
 
   if (!type || !["ad", "coupon"].includes(type)) {
     return next(new AppError(400, "Type must be 'ad' or 'coupon'"));
@@ -497,17 +524,17 @@ export const createCarouselItem = catchAsync(async (req, res, next) => {
   if (!req.file) return next(new AppError(400, "Image required"));
 
   if (type === "coupon") {
-    if (discountPercentage === undefined || discountPercentage === null) {
+    if (parsedDiscountPercentage === null) {
       return next(new AppError(400, "discountPercentage required"));
     }
-    if (discountPercentage < 0 || discountPercentage > 100) {
+    if (parsedDiscountPercentage < 0 || parsedDiscountPercentage > 100) {
       return next(
         new AppError(400, "discountPercentage must be between 0 and 100"),
       );
     }
   }
 
-  const upload = await uploadOnCloudinary(req.file.buffer);
+  const upload = await uploadCarouselImage(req.file.buffer);
 
   const item = await Carousel.create({
     type,
@@ -518,9 +545,9 @@ export const createCarouselItem = catchAsync(async (req, res, next) => {
       public_id: upload.public_id,
       url: upload.secure_url,
     },
-    discountPercentage: type === "coupon" ? discountPercentage : null,
-    order: order !== undefined ? order : 0,
-    isActive: isActive !== undefined ? isActive : true,
+    discountPercentage: type === "coupon" ? parsedDiscountPercentage : null,
+    order: parsedOrder,
+    isActive: parsedIsActive,
   });
 
   sendResponse(res, {
@@ -535,6 +562,10 @@ export const updateCarouselItem = catchAsync(async (req, res, next) => {
   const { carouselId } = req.params;
   const { type, title, subtitle, link, discountPercentage, order, isActive } =
     req.body;
+  const parsedDiscountPercentage =
+    discountPercentage !== undefined
+      ? parseOptionalNumber(discountPercentage, null)
+      : undefined;
 
   const item = await Carousel.findById(carouselId);
   if (!item) return next(new AppError(404, "Carousel item not found"));
@@ -547,7 +578,7 @@ export const updateCarouselItem = catchAsync(async (req, res, next) => {
   if (nextType === "coupon") {
     const nextDiscountPercentage =
       discountPercentage !== undefined
-        ? discountPercentage
+        ? parsedDiscountPercentage
         : item.discountPercentage;
 
     if (nextDiscountPercentage === undefined || nextDiscountPercentage === null) {
@@ -567,11 +598,13 @@ export const updateCarouselItem = catchAsync(async (req, res, next) => {
   if (title) item.title = title.trim();
   if (subtitle) item.subtitle = subtitle.trim();
   if (link !== undefined) item.link = link.trim();
-  if (order !== undefined) item.order = order;
-  if (isActive !== undefined) item.isActive = isActive;
+  if (order !== undefined) item.order = parseOptionalNumber(order, 0);
+  if (isActive !== undefined) {
+    item.isActive = parseOptionalBoolean(isActive, item.isActive);
+  }
 
   if (req.file) {
-    const upload = await uploadOnCloudinary(req.file.buffer);
+    const upload = await uploadCarouselImage(req.file.buffer);
     item.image = {
       public_id: upload.public_id,
       url: upload.secure_url,
