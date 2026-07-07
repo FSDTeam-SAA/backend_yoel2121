@@ -760,6 +760,233 @@
             },
             "url": "{{baseUrl}}/{{apiPrefix}}/admin/applications/{{applicationId}}"
           }
+        },
+        {
+          "name": "List Carousels (Admin)",
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/{{apiPrefix}}/admin/carousels?type=&isActive=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{apiPrefix}}",
+                "admin",
+                "carousels"
+              ],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "",
+                  "description": "ad | coupon"
+                },
+                {
+                  "key": "isActive",
+                  "value": "",
+                  "description": "true | false"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Carousel Item (Ad)",
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "type",
+                  "value": "ad",
+                  "type": "text"
+                },
+                {
+                  "key": "title",
+                  "value": "Summer Sale",
+                  "type": "text"
+                },
+                {
+                  "key": "subtitle",
+                  "value": "Up to 50% off on all services",
+                  "type": "text"
+                },
+                {
+                  "key": "link",
+                  "value": "",
+                  "type": "text"
+                },
+                {
+                  "key": "order",
+                  "value": "0",
+                  "type": "text"
+                },
+                {
+                  "key": "isActive",
+                  "value": "true",
+                  "type": "text"
+                },
+                {
+                  "key": "image",
+                  "src": "",
+                  "type": "file"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/{{apiPrefix}}/admin/carousels"
+          }
+        },
+        {
+          "name": "Create Carousel Item (Coupon)",
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "type",
+                  "value": "coupon",
+                  "type": "text"
+                },
+                {
+                  "key": "title",
+                  "value": "First Booking Discount",
+                  "type": "text"
+                },
+                {
+                  "key": "subtitle",
+                  "value": "Use this code on your first job",
+                  "type": "text"
+                },
+                {
+                  "key": "discountPercentage",
+                  "value": "20",
+                  "type": "text"
+                },
+                {
+                  "key": "link",
+                  "value": "",
+                  "type": "text"
+                },
+                {
+                  "key": "order",
+                  "value": "1",
+                  "type": "text"
+                },
+                {
+                  "key": "isActive",
+                  "value": "true",
+                  "type": "text"
+                },
+                {
+                  "key": "image",
+                  "src": "",
+                  "type": "file"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/{{apiPrefix}}/admin/carousels"
+          }
+        },
+        {
+          "name": "Update Carousel Item",
+          "request": {
+            "method": "PATCH",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "title",
+                  "value": "Summer Sale Extended",
+                  "type": "text"
+                },
+                {
+                  "key": "subtitle",
+                  "value": "Now until end of month",
+                  "type": "text"
+                },
+                {
+                  "key": "discountPercentage",
+                  "value": "25",
+                  "type": "text"
+                },
+                {
+                  "key": "order",
+                  "value": "0",
+                  "type": "text"
+                },
+                {
+                  "key": "isActive",
+                  "value": "true",
+                  "type": "text"
+                },
+                {
+                  "key": "image",
+                  "src": "",
+                  "type": "file"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/{{apiPrefix}}/admin/carousels/{{carouselId}}"
+          }
+        },
+        {
+          "name": "Delete Carousel Item",
+          "request": {
+            "method": "DELETE",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/{{apiPrefix}}/admin/carousels/{{carouselId}}"
+          }
         }
       ]
     },
@@ -810,6 +1037,28 @@
               }
             },
             "url": "{{baseUrl}}/{{apiPrefix}}/categories/propose"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Carousels",
+      "item": [
+        {
+          "name": "Get Active Carousels",
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/{{apiPrefix}}/carousels"
           }
         }
       ]
@@ -1615,6 +1864,10 @@
     {
       "key": "categoryId",
       "value": "YOUR_CATEGORY_ID"
+    },
+    {
+      "key": "carouselId",
+      "value": "YOUR_CAROUSEL_ID"
     },
     {
       "key": "status",

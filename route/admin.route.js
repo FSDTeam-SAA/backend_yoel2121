@@ -3,19 +3,23 @@ import {
   allApplications,
   approveEditRejectReview,
   approveRejectUser,
+  createCarouselItem,
   createCategory,
+  deleteCarouselItem,
   deleteCategory,
   deleteUser,
   getAdminOverview,
   getApplicationDetailsAdmin,
   getReviewDetailsAdmin,
+  listCarouselsAdmin,
   listCategories,
   listReviews,
   listUsers,
   moderateJob,
+  updateCarouselItem,
   updateCategory,
 } from "../controller/admin.controller.js";
-import { protect } from "../middleware/auth.middleware.js";
+import { protect, requireAdmin } from "../middleware/auth.middleware.js";
 import upload from "../middleware/multer.middleware.js";
 
 const router = Router();
@@ -44,5 +48,22 @@ router.delete("/categories/:categoryId", protect, deleteCategory);
 
 router.get("/applications", protect, allApplications);
 router.get("/applications/:applicationId", protect, getApplicationDetailsAdmin);
+
+router.get("/carousels", protect, requireAdmin, listCarouselsAdmin);
+router.post(
+  "/carousels",
+  protect,
+  requireAdmin,
+  upload.single("image"),
+  createCarouselItem,
+);
+router.patch(
+  "/carousels/:carouselId",
+  protect,
+  requireAdmin,
+  upload.single("image"),
+  updateCarouselItem,
+);
+router.delete("/carousels/:carouselId", protect, requireAdmin, deleteCarouselItem);
 
 export default router;
