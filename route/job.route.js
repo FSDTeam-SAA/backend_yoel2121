@@ -7,6 +7,7 @@ import {
   getJobContactStatus,
   listApplicantsForJob,
   listJobsNearYou,
+  listPublicJobs,
   listMyJobsuser,
   updateJobStatususer,
   getCurrentJobs,
@@ -29,6 +30,9 @@ router.get("/near-you", protect, listJobsNearYou);
 
 // Public: recent completed jobs for a tradesperson
 router.get("/tradesperson/:tradespersonId/recent", getRecentJobs);
+
+// Public: browse jobs without logging in (guest home screen)
+router.get("/public", listPublicJobs);
 
 // Public details
 router.get("/:jobId", getJobDetails);
