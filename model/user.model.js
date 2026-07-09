@@ -29,6 +29,8 @@ const userSchema = new mongoose.Schema(
     isKycVerified: { type: Boolean, default: false },
     emailVerificationOTP: { type: String, default: null },
     emailVerificationOTPExpiry: { type: Date, default: null },
+    deleteAccountOTP: { type: String, default: null },
+    deleteAccountOTPExpiry: { type: Date, default: null },
 
     accountStatus: {
       type: String,

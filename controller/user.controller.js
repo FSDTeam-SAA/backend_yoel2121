@@ -5,10 +5,20 @@ import { Category } from "../model/category.model.js";
 import { Review } from "../model/review.model.js";
 import { User } from "../model/user.model.js";
 import catchAsync from "../utils/catchAsync.js";
-import { uploadOnCloudinary } from "../utils/commonMethod.js";
+import { generateOTP, uploadOnCloudinary } from "../utils/commonMethod.js";
+import { sendEmail } from "../utils/sendEmail.js";
 import sendResponse from "../utils/sendResponse.js";
 
 const DIDIT_BASE_URL = "https://verification.didit.me";
+
+const buildDeleteAccountOtpEmail = (otp) => `
+  <p>Hello,</p>
+  <p>We received a request to delete your ZENTROFIX account.</p>
+  <p>Your confirmation code is <strong>${otp}</strong>.</p>
+  <p>This code will expire in 10 minutes. Entering it will permanently delete your account and all associated data.</p>
+  <p>If you did not request this, you can safely ignore this email.</p>
+  <p>Regards,<br />ZENTROFIX Team</p>
+`;
 
 export const getProfile = catchAsync(async (req, res, next) => {
   const userId = req.user._id;
@@ -184,6 +194,61 @@ export const changePassword = catchAsync(async (req, res) => {
     statusCode: httpStatus.OK,
     success: true,
     message: "Password changed",
+  });
+});
+
+// Step 1 of account deletion: email the logged-in user a confirmation OTP.
+export const requestAccountDeletion = catchAsync(async (req, res) => {
+  const user = await User.findById(req.user._id);
+  if (!user) throw new AppError(httpStatus.NOT_FOUND, "User not found");
+
+  const otp = generateOTP();
+  user.deleteAccountOTP = otp;
+  user.deleteAccountOTPExpiry = Date.now() + 10 * 60 * 1000;
+  await user.save();
+
+  try {
+    await sendEmail(
+      user.email,
+      "Confirm Account Deletion",
+      buildDeleteAccountOtpEmail(otp),
+    );
+  } catch (err) {
+    throw new AppError(500, "Failed to send OTP email");
+  }
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: "OTP sent to your email successfully",
+  });
+});
+
+// Step 2 of account deletion: verify the OTP, then permanently delete the
+// account (matches the existing admin.deleteUser behavior — no cascade of
+// related jobs/applications).
+export const confirmAccountDeletion = catchAsync(async (req, res) => {
+  const { otp } = req.body;
+  if (!otp) throw new AppError(httpStatus.BAD_REQUEST, "OTP is required");
+
+  const user = await User.findById(req.user._id);
+  if (!user) throw new AppError(httpStatus.NOT_FOUND, "User not found");
+
+  if (
+    !user.deleteAccountOTP ||
+    !user.deleteAccountOTPExpiry ||
+    user.deleteAccountOTP !== otp ||
+    user.deleteAccountOTPExpiry < Date.now()
+  ) {
+    throw new AppError(httpStatus.BAD_REQUEST, "Invalid or expired OTP");
+  }
+
+  await User.findByIdAndDelete(req.user._id);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: "Account deleted successfully",
   });
 });
 
