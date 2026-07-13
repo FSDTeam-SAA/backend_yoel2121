@@ -135,10 +135,11 @@ export const listTradespersonReviewsPublic = catchAsync(async (req, res) => {
 });
 
 export const listReviews = catchAsync(async (req, res) => {
-  const { status, reviewerRole } = req.query;
+  const { status, reviewerRole, jobId } = req.query;
   const filter = {};
   if (status) filter.status = status;
   if (reviewerRole) filter.reviewerRole = reviewerRole;
+  if (jobId) filter.jobId = jobId;
   const reviews = await Review.find(filter).sort({ createdAt: -1 });
   sendResponse(res, {
     statusCode: 200,
