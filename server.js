@@ -31,8 +31,6 @@ const staticAllowedOrigins = [
   "http://127.0.0.1:4173",
   "https://admin-dashbord-yoel2121.vercel.app",
   "https://admin-dashboard-yoel2121.vercel.app",
-  "https://frontend-yoel-ashen.vercel.app",
-  "https://frontend-yoel.vercel.app",
 ];
 
 const envAllowedOrigins = (process.env.CLIENT_URL || "")
@@ -47,7 +45,6 @@ const allowedOrigins = [
 const allowedOriginPatterns = [
   /^https:\/\/admin-dashbord-yoel2121(?:-[a-z0-9-]+)?\.vercel\.app$/i,
   /^https:\/\/admin-dashboard-yoel2121(?:-[a-z0-9-]+)?\.vercel\.app$/i,
-  /^https:\/\/frontend-yoel(?:-[a-z0-9-]+)?\.vercel\.app$/i,
   /^http:\/\/localhost:\d+$/i,
   /^http:\/\/127\.0\.0\.1:\d+$/i,
 ];
@@ -80,7 +77,7 @@ const server = createServer(app);
 
 export const io = new Server(server, {
   cors: {
-    origin: corsOptions.origin,
+    origin: allowedOrigins,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     credentials: true,
   },
