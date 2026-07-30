@@ -1,11 +1,11 @@
+import cookieParser from "cookie-parser";
+import cors from "cors";
 import "dotenv/config";
 import express from "express";
-import cors from "cors";
-import mongoose from "mongoose";
-import cookieParser from "cookie-parser";
-import router from "./mainroute/index.js";
 import { createServer } from "http";
+import mongoose from "mongoose";
 import { Server } from "socket.io";
+import router from "./mainroute/index.js";
 
 import globalErrorHandler from "./middleware/globalErrorHandler.js";
 import notFound from "./middleware/notFound.js";
@@ -31,6 +31,7 @@ const staticAllowedOrigins = [
   "http://127.0.0.1:4173",
   "https://admin-dashbord-yoel2121.vercel.app",
   "https://admin-dashboard-yoel2121.vercel.app",
+  "https://pr7m9mtd-5174.asse.devtunnels.ms/"
 ];
 
 const envAllowedOrigins = (process.env.CLIENT_URL || "")
