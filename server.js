@@ -31,7 +31,12 @@ const staticAllowedOrigins = [
   "http://127.0.0.1:4173",
   "https://admin-dashbord-yoel2121.vercel.app",
   "https://admin-dashboard-yoel2121.vercel.app",
-  "https://pr7m9mtd-5174.asse.devtunnels.ms/"
+  "https://pr7m9mtd-5174.asse.devtunnels.ms/",
+  "https://zentrofix.com",
+  "https://zentrofix.com/",
+  "https://www.zentrofix.com/",
+  "https://admin.zentrofix.com/",
+  "https://admin.zentrofix.com"
 ];
 
 const envAllowedOrigins = (process.env.CLIENT_URL || "")
