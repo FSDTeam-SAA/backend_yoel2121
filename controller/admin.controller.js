@@ -141,15 +141,17 @@ export const getUserDetails = catchAsync(async (req, res, next) => {
   });
 });
 
-export const approveRejectUser = catchAsync(async (req, res, next) => {
+export const moderateTradesperson = catchAsync(async (req, res, next) => {
   const { userId } = req.params;
   const { action } = req.body; // "approve" | "reject" | "suspend"
 
   const user = await User.findById(userId);
 
   if (!user) return next(new AppError(404, "User not found"));
-  if (user.role === "admin") {
-    return next(new AppError(403, "Admin accounts cannot be moderated"));
+  if (user.role !== "tradesperson") {
+    return next(
+      new AppError(403, "Only tradesperson accounts can be moderated"),
+    );
   }
 
   if (action === "approve") user.accountStatus = "approved";
@@ -173,7 +175,7 @@ export const approveRejectUser = catchAsync(async (req, res, next) => {
   sendResponse(res, {
     statusCode: 200,
     success: true,
-    message: "User status updated",
+    message: "Tradesperson status updated",
     data: user,
   });
 });

@@ -85,10 +85,7 @@ export const register = catchAsync(async (req, res, next) => {
     address,
     role: registrationRole,
     isEmailVerified: false,
-    accountStatus:
-      registrationRole === "user" || registrationRole === "homeowner"
-        ? "pending"
-        : "approved",
+    accountStatus: "approved",
     userLocation:
       longitude && latitude
         ? { type: "Point", coordinates: [Number(longitude), Number(latitude)] }
@@ -128,10 +125,7 @@ export const register = catchAsync(async (req, res, next) => {
   sendResponse(res, {
     statusCode: 201,
     success: true,
-    message:
-      (role === "user" || role === "homeowner")
-        ? "Registration successful. Please verify your email with the OTP sent & wait for admin approval."
-        : "Registration successful. Please verify your email with the OTP sent.",
+    message: "Registration successful. Please verify your email with the OTP sent.",
     data: {
       email: user.email,
       role: user.role,
@@ -159,6 +153,14 @@ export const login = catchAsync(async (req, res) => {
 
   if (!(await User.isPasswordMatched(password, user.password))) {
     throw new AppError(httpStatus.UNAUTHORIZED, "Invalid email or password");
+  }
+
+  if (
+    user.accountStatus === "pending" &&
+    (user.role === "user" || user.role === "homeowner")
+  ) {
+    user.accountStatus = "approved";
+    await user.save();
   }
 
   if (
@@ -543,7 +545,7 @@ export const verifyOTP = catchAsync(async (req, res, next) => {
   user.emailVerificationOTP = undefined;
   user.emailVerificationOTPExpiry = undefined;
   user.isEmailVerified = true;
-  user.accountStatus = (user.role === "user" || user.role === "homeowner") ? "pending" : "approved";
+  user.accountStatus = "approved";
   await user.save();
 
   sendResponse(res, {
@@ -639,6 +641,14 @@ export const refreshToken = catchAsync(async (req, res) => {
   if (!user || user.refreshToken !== refreshToken) {
     throw new AppError(401, "Invalid refresh token");
   }
+  if (
+    user.accountStatus === "pending" &&
+    (user.role === "user" || user.role === "homeowner")
+  ) {
+    user.accountStatus = "approved";
+    await user.save();
+  }
+
   if (user.accountStatus === "suspended" || user.accountStatus === "rejected") {
     throw new AppError(403, `Account is ${user.accountStatus}`);
   }
@@ -717,7 +727,15 @@ export const googleLogin = catchAsync(async (req, res, next) => {
     });
   }
 
-  // Hard block only for suspended/rejected — pending gets tokens so Flutter can handle UX
+  if (
+    user.accountStatus === "pending" &&
+    (user.role === "user" || user.role === "homeowner")
+  ) {
+    user.accountStatus = "approved";
+    await user.save();
+  }
+
+  // Suspended and rejected accounts remain blocked.
   if (user.accountStatus === "suspended" || user.accountStatus === "rejected") {
     return sendResponse(res, {
       statusCode: httpStatus.FORBIDDEN,

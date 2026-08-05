@@ -2,7 +2,7 @@ import { Router } from "express";
 import {
   allApplications,
   approveEditRejectReview,
-  approveRejectUser,
+  moderateTradesperson,
   createCarouselItem,
   createCategory,
   deleteCarouselItem,
@@ -20,6 +20,10 @@ import {
   updateCarouselItem,
   updateCategory,
 } from "../controller/admin.controller.js";
+import {
+  getLegalDocumentForAdmin,
+  updateLegalDocument,
+} from "../controller/legalDocument.controller.js";
 import { protect, requireAdmin } from "../middleware/auth.middleware.js";
 import upload from "../middleware/multer.middleware.js";
 
@@ -29,8 +33,12 @@ router.use(protect, requireAdmin);
 
 router.get("/users", listUsers);
 router.get("/users/:userId", getUserDetails);
-router.patch("/users/:userId/status", approveRejectUser);
 router.delete("/users/:userId", deleteUser);
+
+router.patch("/tradespeople/:userId/status", moderateTradesperson);
+
+router.get("/legal-documents/:type", getLegalDocumentForAdmin);
+router.put("/legal-documents/:type", updateLegalDocument);
 
 router.get("/overview", getAdminOverview);
 

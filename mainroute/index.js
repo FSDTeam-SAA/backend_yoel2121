@@ -13,6 +13,7 @@ import userRoutes from "../route/user.route.js";
 import notificationRoutes from "../route/notification.route.js";
 import paymentRoutes from "../route/payment.route.js";
 import diditRoutes from "../route/didit.route.js";
+import legalDocumentRoutes from "../route/legalDocument.route.js";
 
 const router = Router();
 
@@ -29,5 +30,6 @@ router.use("/reviews", reviewRoutes);
 router.use("/notifications", notificationRoutes);
 router.use("/payments", paymentRoutes);
 router.use("/didit", diditRoutes);
+router.use("/legal-documents", legalDocumentRoutes);
 
 export default router;

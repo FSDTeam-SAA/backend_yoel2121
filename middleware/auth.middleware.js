@@ -31,7 +31,11 @@ export const protect = async (req, res, next) => {
 };
 
 export const requireApprovedAccount = () => (req, res, next) => {
-  if (req.user?.accountStatus !== "approved") {
+  const isLegacyPendingCustomer =
+    req.user?.accountStatus === "pending" &&
+    (req.user?.role === "user" || req.user?.role === "homeowner");
+
+  if (req.user?.accountStatus !== "approved" && !isLegacyPendingCustomer) {
     return next(new AppError(403, "Account not approved"));
   }
   next();
