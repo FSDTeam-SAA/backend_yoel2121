@@ -2,10 +2,10 @@ import catchAsync from "../utils/catchAsync.js";
 import sendResponse from "../utils/sendResponse.js";
 import { Conversation } from "../model/conversation.model.js";
 import { Message } from "../model/message.model.js";
-import { io } from "../server.js";
 import AppError from "../errors/AppError.js";
 import { sendNotifications } from "../utils/notification.js";
 import { containsPersonalContactInfo } from "../utils/contentFilter.js";
+import { getIo } from "../utils/socket.js";
 
 export const listMessages = catchAsync(async (req, res, next) => {
   const { conversationId } = req.params;
@@ -59,16 +59,17 @@ export const sendMessage = catchAsync(async (req, res, next) => {
     text?.slice(0, 120) || (attachments.length ? "📎 Attachment" : "");
   await convo.save();
 
-  // realtime emit
-  io.to(`conv_${conversationId}`).emit("newMessage", {
-    conversationId,
-    message: msg,
-  });
+  const io = getIo();
+  if (io) {
+    io.to(`conv_${conversationId}`).emit("newMessage", {
+      conversationId,
+      message: msg,
+    });
 
-  // also push to each user room (your existing style)
-  for (const p of convo.participants) {
-    io.to(`chat_${p}`).emit("message:notify", { conversationId, message: msg });
-    io.to(`user_${p}`).emit("message:notify", { conversationId, message: msg });
+    for (const p of convo.participants) {
+      io.to(`chat_${p}`).emit("message:notify", { conversationId, message: msg });
+      io.to(`user_${p}`).emit("message:notify", { conversationId, message: msg });
+    }
   }
   await sendNotifications(
     convo.participants.filter((p) => String(p) !== String(req.user._id)),

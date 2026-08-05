@@ -10,6 +10,7 @@ import { Server } from "socket.io";
 import globalErrorHandler from "./middleware/globalErrorHandler.js";
 import notFound from "./middleware/notFound.js";
 import { initFirebase } from "./utils/firebase.js";
+import { setIo } from "./utils/socket.js";
 
 initFirebase();
 
@@ -25,8 +26,16 @@ const staticAllowedOrigins = [
   "http://10.10.5.81:5006",
   "http://localhost:8000",
   "http://127.0.0.1:8000",
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  "http://localhost:4173",
+  "http://127.0.0.1:4173",
   "https://admin-dashbord-yoel2121.vercel.app",
   "https://admin-dashboard-yoel2121.vercel.app",
+  "https://pr7m9mtd-5174.asse.devtunnels.ms",
+  "https://zentrofix.com",
+  "https://www.zentrofix.com",
+  "https://admin.zentrofix.com",
 ];
 
 const envAllowedOrigins = (process.env.CLIENT_URL || "")
@@ -78,6 +87,7 @@ export const io = new Server(server, {
     credentials: true,
   },
 });
+setIo(io);
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));

@@ -1,8 +1,8 @@
 import { Notification } from "../model/notification.model.js";
 import { User } from "../model/user.model.js";
 import { DeviceToken } from "../model/deviceToken.model.js";
-import { io } from "../server.js";
 import { getMessaging } from "./firebase.js";
+import { getIo } from "./socket.js";
 
 const uniqueIds = (ids) => [
   ...new Set(ids.filter(Boolean).map((id) => String(id))),
@@ -49,6 +49,9 @@ export const emitUnreadNotificationCount = async (userId) => {
     user: userId,
     isRead: false,
   });
+
+  const io = getIo();
+  if (!io) return;
 
   io.to(`user_${userId}`).emit("notification:unreadCount", {
     count: unreadCount,
@@ -101,6 +104,9 @@ export const notifyAdmins = async (payload) => {
 };
 
 const emitNotification = async (userId, notification) => {
+  const io = getIo();
+  if (!io) return;
+
   io.to(`user_${userId}`).emit("notification:new", notification);
   await emitUnreadNotificationCount(userId);
 };

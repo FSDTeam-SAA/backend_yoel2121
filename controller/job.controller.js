@@ -263,6 +263,111 @@ export const listJobsNearYou = catchAsync(async (req, res) => {
   });
 });
 
+export const listPublicJobs = catchAsync(async (req, res, next) => {
+  const { page = 1, limit = 10, categoryId, q, lng, lat, radiusKm } = req.query;
+
+  const pageNum = Math.max(1, Number(page) || 1);
+  const limitNum = Math.min(50, Math.max(1, Number(limit) || 10));
+  const resolvedLng = lng !== undefined ? Number(lng) : undefined;
+  const resolvedLat = lat !== undefined ? Number(lat) : undefined;
+  const resolvedRadius = radiusKm !== undefined ? Number(radiusKm) : 25;
+
+  const baseFilter = {
+    visibility: "public",
+    status: "pending",
+  };
+
+  if (categoryId) {
+    if (!mongoose.isValidObjectId(categoryId)) {
+      return next(new AppError(400, "Invalid categoryId"));
+    }
+    baseFilter.categoryId = new mongoose.Types.ObjectId(categoryId);
+  }
+
+  if (q) {
+    baseFilter.$or = [
+      { title: { $regex: q, $options: "i" } },
+      { description: { $regex: q, $options: "i" } },
+    ];
+  }
+
+  const hasGeo =
+    resolvedLng !== undefined &&
+    resolvedLat !== undefined &&
+    !isNaN(resolvedLng) &&
+    !isNaN(resolvedLat);
+
+  const pipeline = [];
+
+  if (hasGeo) {
+    pipeline.push({
+      $geoNear: {
+        near: {
+          type: "Point",
+          coordinates: [resolvedLng, resolvedLat],
+        },
+        distanceField: "distanceMeters",
+        spherical: true,
+        maxDistance: resolvedRadius * 1000,
+        query: baseFilter,
+      },
+    });
+
+    pipeline.push({
+      $addFields: {
+        distanceKm: {
+          $round: [{ $divide: ["$distanceMeters", 1000] }, 2],
+        },
+      },
+    });
+  } else {
+    pipeline.push({ $match: baseFilter });
+  }
+
+  pipeline.push({ $sort: { createdAt: -1 } });
+  pipeline.push({ $skip: (pageNum - 1) * limitNum }, { $limit: limitNum });
+  pipeline.push(
+    {
+      $lookup: {
+        from: "categories",
+        localField: "categoryId",
+        foreignField: "_id",
+        as: "category",
+      },
+    },
+    {
+      $unwind: {
+        path: "$category",
+        preserveNullAndEmptyArrays: true,
+      },
+    },
+    {
+      $project: {
+        userId: 0,
+        tradePerson: 0,
+        invitedTradespersonId: 0,
+        paymentId: 0,
+      },
+    },
+  );
+
+  const jobs = await Job.aggregate(pipeline);
+  const total = await Job.countDocuments(baseFilter);
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Public jobs fetched successfully",
+    data: jobs,
+    meta: {
+      page: pageNum,
+      limit: limitNum,
+      total,
+      totalPages: Math.ceil(total / limitNum),
+    },
+  });
+});
+
 export const getJobDetails = catchAsync(async (req, res, next) => {
   const job = await Job.findById(req.params.jobId)
     .populate("userId", "name  name email phone profileImage location")
