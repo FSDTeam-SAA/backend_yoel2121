@@ -4,24 +4,34 @@ import AppError from "../errors/AppError.js";
 import { User } from "./../model/user.model.js";
 
 export const protect = async (req, res, next) => {
-  const token = req.headers.authorization?.split(" ")[1];
-  if (!token) throw new AppError(httpStatus.NOT_FOUND, "Token not found");
-
-  try {
-    const decoded = await jwt.verify(token, process.env.JWT_ACCESS_SECRET);
-    // console.log(decoded)
-    const user = await User.findById(decoded._id);
-    if (user) {
-      req.user = user;
-    }
-    next();
-  } catch (err) {
-    throw new AppError(401, "Invalid token");
+  const authorization = req.headers.authorization;
+  if (!authorization?.startsWith("Bearer ")) {
+    return next(new AppError(httpStatus.UNAUTHORIZED, "Bearer token required"));
   }
+
+  const token = authorization.slice("Bearer ".length).trim();
+  if (!token) {
+    return next(new AppError(httpStatus.UNAUTHORIZED, "Bearer token required"));
+  }
+
+  let decoded;
+  try {
+    decoded = jwt.verify(token, process.env.JWT_ACCESS_SECRET);
+  } catch {
+    return next(new AppError(httpStatus.UNAUTHORIZED, "Invalid token"));
+  }
+
+  const user = await User.findById(decoded._id);
+  if (!user) {
+    return next(new AppError(httpStatus.UNAUTHORIZED, "User no longer exists"));
+  }
+
+  req.user = user;
+  next();
 };
 
 export const requireApprovedAccount = () => (req, res, next) => {
-  if (req.user.status !== "approved") {
+  if (req.user?.accountStatus !== "approved") {
     return next(new AppError(403, "Account not approved"));
   }
   next();
@@ -30,6 +40,9 @@ export const requireApprovedAccount = () => (req, res, next) => {
 export const requireAdmin = (req, res, next) => {
   if (req.user?.role !== "admin") {
     return next(new AppError(403, "Admin access required"));
+  }
+  if (req.user.accountStatus !== "approved") {
+    return next(new AppError(403, "Admin account is not approved"));
   }
   next();
 };

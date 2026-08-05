@@ -20,15 +20,15 @@ const userSchema = new mongoose.Schema(
       index: true,
     },
 
-    password: { type: String, default: null },
+    password: { type: String, default: null, select: false },
 
     phone: { type: String, default: "" },
     address: { type: String, default: "" },
 
     isEmailVerified: { type: Boolean, default: false },
     isKycVerified: { type: Boolean, default: false },
-    emailVerificationOTP: { type: String, default: null },
-    emailVerificationOTPExpiry: { type: Date, default: null },
+    emailVerificationOTP: { type: String, default: null, select: false },
+    emailVerificationOTPExpiry: { type: Date, default: null, select: false },
 
     accountStatus: {
       type: String,
@@ -64,7 +64,7 @@ const userSchema = new mongoose.Schema(
 
     preferredRadiusKm: { type: Number, default: 25 },
 
-    password_reset_token: { type: String, default: "" },
+    password_reset_token: { type: String, default: "", select: false },
 
     nationality: { type: String, default: "" },
 
@@ -92,7 +92,7 @@ const userSchema = new mongoose.Schema(
       default: "email",
     },
 
-    refreshToken: { type: String, default: "" },
+    refreshToken: { type: String, default: "", select: false },
   },
   { timestamps: true },
 );
@@ -124,8 +124,8 @@ userSchema.pre("save", function (next) {
   next();
 });
 
-userSchema.statics.isUserExistsByEmail = async function (email) {
-  return this.findOne({ email }).select("+password");
+userSchema.statics.isUserExistsByEmail = function (email) {
+  return this.findOne({ email });
 };
 
 userSchema.statics.isPasswordMatched = async function (

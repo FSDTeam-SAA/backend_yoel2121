@@ -43,9 +43,6 @@ export const getTradespersonProfile = catchAsync(async (req, res, next) => {
     )
     .populate("operatingTrades", "name status");
 
-  if (u.role !== "tradesperson")
-    return next(new AppError(404, "User not found"));
-
   if (!u || u.role !== "tradesperson")
     return next(new AppError(404, "Tradesperson not found"));
 
@@ -168,12 +165,27 @@ export const updateProfile = catchAsync(async (req, res, next) => {
 export const changePassword = catchAsync(async (req, res) => {
   const { currentPassword, newPassword, confirmPassword } = req.body;
 
+  if (!currentPassword || !newPassword || !confirmPassword) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      "Current password, new password, and confirmation are required",
+    );
+  }
+  if (typeof newPassword !== "string" || newPassword.length < 8 || newPassword.length > 128) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      "New password must be between 8 and 128 characters",
+    );
+  }
   if (newPassword !== confirmPassword)
     throw new AppError(httpStatus.BAD_REQUEST, "Passwords don't match");
 
   const user = await User.findById(req.user._id).select("+password");
 
-  if (!(await User.isPasswordMatched(currentPassword, user.password))) {
+  if (
+    !user?.password ||
+    !(await User.isPasswordMatched(currentPassword, user.password))
+  ) {
     throw new AppError(httpStatus.UNAUTHORIZED, "Current password wrong");
   }
   user.password = newPassword;
@@ -184,6 +196,7 @@ export const changePassword = catchAsync(async (req, res) => {
     statusCode: httpStatus.OK,
     success: true,
     message: "Password changed",
+    data: null,
   });
 });
 

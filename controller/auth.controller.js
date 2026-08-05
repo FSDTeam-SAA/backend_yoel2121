@@ -30,6 +30,17 @@ const buildResetPasswordOtpEmail = (otp) => `
   <p>Regards,<br />ZENTROFIX Team</p>
 `;
 
+const sanitizeUser = (user) => {
+  const safeUser = user.toObject ? user.toObject() : { ...user };
+  delete safeUser.password;
+  delete safeUser.refreshToken;
+  delete safeUser.password_reset_token;
+  delete safeUser.emailVerificationOTP;
+  delete safeUser.emailVerificationOTPExpiry;
+  delete safeUser.__v;
+  return safeUser;
+};
+
 export const register = catchAsync(async (req, res, next) => {
   const {
     email,
@@ -52,6 +63,14 @@ export const register = catchAsync(async (req, res, next) => {
   if (password !== confirmPassword) {
     return next(new AppError(400, "Passwords do not match"));
   }
+  if (typeof password !== "string" || password.length < 8 || password.length > 128) {
+    return next(new AppError(400, "Password must be between 8 and 128 characters"));
+  }
+
+  const registrationRole = role || "user";
+  if (!["user", "homeowner", "tradesperson"].includes(registrationRole)) {
+    return next(new AppError(400, "Invalid registration role"));
+  }
 
   const existingUser = await User.findOne({ email });
   if (existingUser) {
@@ -64,9 +83,12 @@ export const register = catchAsync(async (req, res, next) => {
     password,
     phone,
     address,
-    role,
+    role: registrationRole,
     isEmailVerified: false,
-    status: (role === "user" || role === "homeowner") ? "pending" : undefined,
+    accountStatus:
+      registrationRole === "user" || registrationRole === "homeowner"
+        ? "pending"
+        : "approved",
     userLocation:
       longitude && latitude
         ? { type: "Point", coordinates: [Number(longitude), Number(latitude)] }
@@ -119,15 +141,24 @@ export const register = catchAsync(async (req, res, next) => {
 
 export const login = catchAsync(async (req, res) => {
   const { email, password } = req.body;
-  const user = await User.isUserExistsByEmail(email);
-  if (!user) {
-    throw new AppError(httpStatus.NOT_FOUND, "User not found");
+  if (!email || !password) {
+    throw new AppError(httpStatus.BAD_REQUEST, "Email and password are required");
   }
-  if (
-    user?.password &&
-    !(await User.isPasswordMatched(password, user.password))
-  ) {
-    throw new AppError(httpStatus.FORBIDDEN, "Password is not correct");
+
+  const user = await User.isUserExistsByEmail(email).select("+password");
+  if (!user) {
+    throw new AppError(httpStatus.UNAUTHORIZED, "Invalid email or password");
+  }
+
+  if (!user.password) {
+    throw new AppError(
+      httpStatus.FORBIDDEN,
+      "Password login is not available for this account",
+    );
+  }
+
+  if (!(await User.isPasswordMatched(password, user.password))) {
+    throw new AppError(httpStatus.UNAUTHORIZED, "Invalid email or password");
   }
 
   if (
@@ -187,7 +218,7 @@ export const login = catchAsync(async (req, res) => {
   );
 
   user.refreshToken = refreshToken;
-  let _user = await user.save();
+  await user.save();
 
   res.cookie("refreshToken", refreshToken, {
     secure: true,
@@ -205,7 +236,7 @@ export const login = catchAsync(async (req, res) => {
       refreshToken: refreshToken,
       role: user.role,
       _id: user._id,
-      user: user,
+      user: sanitizeUser(user),
     },
   });
 });
@@ -362,9 +393,18 @@ export const login = catchAsync(async (req, res) => {
 export const forgetPassword = catchAsync(async (req, res) => {
   const { email } = req.body;
 
+  if (!email) {
+    throw new AppError(httpStatus.BAD_REQUEST, "Email is required");
+  }
+
   const user = await User.isUserExistsByEmail(email);
   if (!user) {
-    throw new AppError(httpStatus.NOT_FOUND, "User not found");
+    return sendResponse(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: "If an account exists, a password reset code has been sent",
+      data: null,
+    });
   }
 
   const otp = generateOTP();
@@ -378,36 +418,33 @@ export const forgetPassword = catchAsync(async (req, res) => {
   user.password_reset_token = otpToken;
   await user.save();
 
-  const emailInfo = await sendEmail(
+  await sendEmail(
     user.email,
     "Reset Password",
     buildResetPasswordOtpEmail(otp),
   );
 
-  const debugData =
-    process.env.NODE_ENV === "production"
-      ? null
-      : {
-          otp,
-          email: user.email,
-          messageId: emailInfo?.messageId,
-          response: emailInfo?.response,
-          accepted: emailInfo?.accepted,
-          rejected: emailInfo?.rejected,
-        };
-
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
-    message: "OTP sent to your email successfully",
-    data: debugData,
+    message: "If an account exists, a password reset code has been sent",
+    data: null,
   });
 });
 
 export const resetPassword = catchAsync(async (req, res) => {
   const { email, otp, password } = req.body;
 
-  const user = await User.isUserExistsByEmail(email);
+  if (!email || !otp || typeof password !== "string") {
+    throw new AppError(httpStatus.BAD_REQUEST, "Email, OTP, and password are required");
+  }
+  if (password.length < 8 || password.length > 128) {
+    throw new AppError(httpStatus.BAD_REQUEST, "Password must be between 8 and 128 characters");
+  }
+
+  const user = await User.isUserExistsByEmail(email).select(
+    "+password_reset_token",
+  );
   if (!user) {
     throw new AppError(httpStatus.NOT_FOUND, "User not found");
   }
@@ -426,7 +463,7 @@ export const resetPassword = catchAsync(async (req, res) => {
     throw new AppError(httpStatus.BAD_REQUEST, "OTP expired or invalid");
   }
 
-  if (decoded.otp !== otp) {
+  if (String(decoded.otp) !== String(otp)) {
     throw new AppError(httpStatus.BAD_REQUEST, "Invalid OTP");
   }
 
@@ -444,7 +481,13 @@ export const resetPassword = catchAsync(async (req, res) => {
 export const resetPasswordOTP = catchAsync(async (req, res) => {
   const { email, otp } = req.body;
 
-  const user = await User.isUserExistsByEmail(email);
+  if (!email || !otp) {
+    throw new AppError(httpStatus.BAD_REQUEST, "Email and OTP are required");
+  }
+
+  const user = await User.isUserExistsByEmail(email).select(
+    "+password_reset_token",
+  );
   if (!user) {
     throw new AppError(httpStatus.NOT_FOUND, "User not found");
   }
@@ -463,7 +506,7 @@ export const resetPasswordOTP = catchAsync(async (req, res) => {
     throw new AppError(httpStatus.BAD_REQUEST, "OTP expired or invalid");
   }
 
-  if (decoded.otp !== otp) {
+  if (String(decoded.otp) !== String(otp)) {
     throw new AppError(httpStatus.BAD_REQUEST, "Invalid OTP");
   }
 
@@ -481,7 +524,9 @@ export const verifyOTP = catchAsync(async (req, res, next) => {
     return next(new AppError(400, "Email and OTP are required"));
   }
 
-  const user = await User.findOne({ email });
+  const user = await User.findOne({ email }).select(
+    "+emailVerificationOTP +emailVerificationOTPExpiry",
+  );
   if (!user) {
     return next(new AppError(404, "User not found"));
   }
@@ -489,7 +534,7 @@ export const verifyOTP = catchAsync(async (req, res, next) => {
   if (
     !user.emailVerificationOTP ||
     !user.emailVerificationOTPExpiry ||
-    user.emailVerificationOTP != otp ||
+    String(user.emailVerificationOTP) !== String(otp) ||
     user.emailVerificationOTPExpiry < Date.now()
   ) {
     return next(new AppError(400, "Invalid or expired OTP"));
@@ -521,40 +566,22 @@ export const resendVerificationOTP = catchAsync(async (req, res, next) => {
     return next(new AppError(404, "User not found"));
   }
 
-  const otp = generateOTP();
-  const otpPayload = { otp };
-  const otpToken = createToken(
-    otpPayload,
-    process.env.OTP_SECRET,
-    process.env.OTP_EXPIRE,
-  );
-
-  user.password_reset_token = otpToken;
+  const otp = generateVerificationCode().toString();
+  user.emailVerificationOTP = otp;
+  user.emailVerificationOTPExpiry = Date.now() + 10 * 60 * 1000;
   await user.save();
 
-  const emailInfo = await sendEmail(
+  await sendEmail(
     user.email,
-    "Reset Password",
-    buildResetPasswordOtpEmail(otp),
+    "Email Verification OTP",
+    buildVerificationOtpEmail(otp),
   );
-
-  const debugData =
-    process.env.NODE_ENV === "production"
-      ? null
-      : {
-          otp,
-          email: user.email,
-          messageId: emailInfo?.messageId,
-          response: emailInfo?.response,
-          accepted: emailInfo?.accepted,
-          rejected: emailInfo?.rejected,
-        };
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
-    message: "OTP sent to your email successfully",
-    data: debugData,
+    message: "Verification code sent successfully",
+    data: null,
   });
 });
 
@@ -572,20 +599,31 @@ export const changePassword = catchAsync(async (req, res) => {
       "Old password and new password cannot be same",
     );
   }
-  const user = await User.findById({ _id: req.user?._id });
+  const user = await User.findById(req.user?._id).select("+password");
 
   if (!user) {
     throw new AppError(httpStatus.NOT_FOUND, "User not found");
   }
+  if (typeof newPassword !== "string" || newPassword.length < 8 || newPassword.length > 128) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      "New password must be between 8 and 128 characters",
+    );
+  }
+  if (
+    !user.password ||
+    !(await User.isPasswordMatched(oldPassword, user.password))
+  ) {
+    throw new AppError(httpStatus.UNAUTHORIZED, "Old password is incorrect");
+  }
+
   user.password = newPassword;
   await user.save();
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
     message: "Password changed",
-    data:{
-      status: "success"
-    },
+    data: null,
   });
 });
 
@@ -597,9 +635,15 @@ export const refreshToken = catchAsync(async (req, res) => {
   }
 
   const decoded = verifyToken(refreshToken, process.env.JWT_REFRESH_SECRET);
-  const user = await User.findById(decoded._id);
+  const user = await User.findById(decoded._id).select("+refreshToken");
   if (!user || user.refreshToken !== refreshToken) {
     throw new AppError(401, "Invalid refresh token");
+  }
+  if (user.accountStatus === "suspended" || user.accountStatus === "rejected") {
+    throw new AppError(403, `Account is ${user.accountStatus}`);
+  }
+  if (user.role === "admin" && user.accountStatus !== "approved") {
+    throw new AppError(403, "Admin account is not approved");
   }
   const jwtPayload = {
     _id: user._id,
@@ -718,7 +762,7 @@ export const googleLogin = catchAsync(async (req, res, next) => {
       _id: user._id,
       accountStatus: user.accountStatus,
       isNewUser,
-      user,
+      user: sanitizeUser(user),
     },
   });
 });

@@ -11,6 +11,7 @@ import {
   getAdminOverview,
   getApplicationDetailsAdmin,
   getReviewDetailsAdmin,
+  getUserDetails,
   listCarouselsAdmin,
   listCategories,
   listReviews,
@@ -24,46 +25,44 @@ import upload from "../middleware/multer.middleware.js";
 
 const router = Router();
 
-router.get("/users", protect, listUsers);
-router.patch("/users/:userId/status", protect, approveRejectUser);
-router.delete("/users/:userId", protect, deleteUser);
+router.use(protect, requireAdmin);
 
-router.get("/overview", protect, getAdminOverview);
+router.get("/users", listUsers);
+router.get("/users/:userId", getUserDetails);
+router.patch("/users/:userId/status", approveRejectUser);
+router.delete("/users/:userId", deleteUser);
 
-router.patch("/jobs/:jobId/moderate", protect, moderateJob);
+router.get("/overview", getAdminOverview);
 
-router.get("/reviews", protect, listReviews);
-router.get("/reviews/:reviewId", protect, getReviewDetailsAdmin);
-router.patch("/reviews/:reviewId", protect, approveEditRejectReview);
+router.patch("/jobs/:jobId/moderate", moderateJob);
+
+router.get("/reviews", listReviews);
+router.get("/reviews/:reviewId", getReviewDetailsAdmin);
+router.patch("/reviews/:reviewId", approveEditRejectReview);
 
 router.get("/categories", listCategories);
-router.post("/categories", protect, upload.single("image"), createCategory);
+router.post("/categories", upload.single("image"), createCategory);
 router.patch(
   "/categories/:categoryId",
-  protect,
   upload.single("image"),
   updateCategory,
 );
-router.delete("/categories/:categoryId", protect, deleteCategory);
+router.delete("/categories/:categoryId", deleteCategory);
 
-router.get("/applications", protect, allApplications);
-router.get("/applications/:applicationId", protect, getApplicationDetailsAdmin);
+router.get("/applications", allApplications);
+router.get("/applications/:applicationId", getApplicationDetailsAdmin);
 
-router.get("/carousels", protect, requireAdmin, listCarouselsAdmin);
+router.get("/carousels", listCarouselsAdmin);
 router.post(
   "/carousels",
-  protect,
-  requireAdmin,
   upload.single("image"),
   createCarouselItem,
 );
 router.patch(
   "/carousels/:carouselId",
-  protect,
-  requireAdmin,
   upload.single("image"),
   updateCarouselItem,
 );
-router.delete("/carousels/:carouselId", protect, requireAdmin, deleteCarouselItem);
+router.delete("/carousels/:carouselId", deleteCarouselItem);
 
 export default router;

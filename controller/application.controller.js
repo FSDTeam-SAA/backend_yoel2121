@@ -138,7 +138,7 @@ export const listMyApplications = catchAsync(async (req, res) => {
     .sort({ createdAt: -1 })
     .populate(
       "jobId",
-      "title locationText status visibility relatedFiles budget progressStage status ",
+      "title locationText status visibility media budget progressStage",
     );
 
   sendResponse(res, {

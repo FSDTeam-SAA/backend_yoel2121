@@ -15,7 +15,7 @@ const EMAIL_FROM = process.env.EMAIL_FROM || process.env.EMAIL_USER;
 export const generateOTP = () => {
   const OTP_LENGTH = 4;
   const otp = Array.from({ length: OTP_LENGTH }, () =>
-    crypto.randomInt(0, 9)
+    crypto.randomInt(0, 10),
   ).join("");
   return otp;
 };

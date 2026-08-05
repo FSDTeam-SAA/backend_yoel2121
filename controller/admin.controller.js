@@ -7,11 +7,41 @@ import { Category } from "../model/category.model.js";
 import { Carousel } from "../model/carousel.model.js";
 import AppError from "../errors/AppError.js";
 import { Application } from "../model/application.model.js";
+import { Payment } from "../model/payment.model.js";
 import { uploadOnCloudinary } from "../utils/commonMethod.js";
 import {
   sendNotification,
   sendNotifications,
 } from "../utils/notification.js";
+
+const ADMIN_USER_FIELDS =
+  "name email role accountStatus createdAt updatedAt profileImage bio externalRatings externalReviewLinks operatingTrades serviceArea phone address nationality ratingSummary userLocation isKycVerified isEmailVerified preferredRadiusKm";
+const ACCOUNT_STATUSES = ["pending", "approved", "rejected", "suspended"];
+const CATEGORY_STATUSES = ["pending", "approved", "rejected"];
+const USER_ROLES = ["admin", "user", "homeowner", "tradesperson"];
+
+const escapeRegExp = (value) =>
+  String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const parseRoleFilter = (role) => {
+  if (!role) return undefined;
+
+  const requestedRoles = String(role)
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  if (
+    requestedRoles.length === 0 ||
+    requestedRoles.some((value) => !USER_ROLES.includes(value))
+  ) {
+    throw new AppError(400, "Invalid role filter");
+  }
+
+  const expandedRoles = new Set(requestedRoles);
+  if (expandedRoles.has("user")) expandedRoles.add("homeowner");
+  return [...expandedRoles];
+};
 
 const updateUserRatingSummary = async (revieweeId) => {
   const stats = await Review.aggregate([
@@ -64,21 +94,50 @@ const uploadCarouselImage = async (fileBuffer) => {
 export const listUsers = catchAsync(async (req, res) => {
   const { role, status, q } = req.query;
   const filter = {};
-  if (role) filter.role = role;
-  if (status) filter.accountStatus = status;
-  if (q)
-    filter.$or = [{ name: new RegExp(q, "i") }, { email: new RegExp(q, "i") }];
+  const roles = parseRoleFilter(role);
+  if (roles) filter.role = { $in: roles };
+
+  if (status) {
+    if (!ACCOUNT_STATUSES.includes(status)) {
+      throw new AppError(400, "Invalid account status filter");
+    }
+    filter.accountStatus = status;
+  }
+
+  if (q) {
+    const search = escapeRegExp(String(q).trim());
+    if (search) {
+      filter.$or = [
+        { name: new RegExp(search, "i") },
+        { email: new RegExp(search, "i") },
+      ];
+    }
+  }
 
   const users = await User.find(filter)
     .sort({ createdAt: -1 })
-    .select(
-      "name email role accountStatus createdAt profileImage bio externalRatings externalReviewLinks operatingTrades serviceArea",
-    );
+    .select(ADMIN_USER_FIELDS)
+    .populate("operatingTrades", "name status image");
   sendResponse(res, {
     statusCode: 200,
     success: true,
     message: "Users fetched",
     data: users,
+  });
+});
+
+export const getUserDetails = catchAsync(async (req, res, next) => {
+  const user = await User.findById(req.params.userId)
+    .select(ADMIN_USER_FIELDS)
+    .populate("operatingTrades", "name status image");
+
+  if (!user) return next(new AppError(404, "User not found"));
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "User fetched",
+    data: user,
   });
 });
 
@@ -89,6 +148,9 @@ export const approveRejectUser = catchAsync(async (req, res, next) => {
   const user = await User.findById(userId);
 
   if (!user) return next(new AppError(404, "User not found"));
+  if (user.role === "admin") {
+    return next(new AppError(403, "Admin accounts cannot be moderated"));
+  }
 
   if (action === "approve") user.accountStatus = "approved";
   else if (action === "reject") user.accountStatus = "rejected";
@@ -119,9 +181,14 @@ export const approveRejectUser = catchAsync(async (req, res, next) => {
 export const deleteUser = catchAsync(async (req, res, next) => {
   const { userId } = req.params;
 
-  const u = await User.findByIdAndDelete(userId);
+  const user = await User.findById(userId);
 
-  if (!u) return next(new AppError(404, "User not found"));
+  if (!user) return next(new AppError(404, "User not found"));
+  if (user.role === "admin") {
+    return next(new AppError(403, "Admin accounts cannot be deleted"));
+  }
+
+  await user.deleteOne();
 
   sendResponse(res, {
     statusCode: 200,
@@ -239,56 +306,147 @@ export const getReviewDetailsAdmin = catchAsync(async (req, res, next) => {
 });
 
 export const getAdminOverview = catchAsync(async (_req, res) => {
-  const [tradespeople, users, jobs] = await Promise.all([
+  const now = new Date();
+  const startOfToday = new Date(now);
+  startOfToday.setUTCHours(0, 0, 0, 0);
+
+  const sevenDaysAgo = new Date(startOfToday);
+  sevenDaysAgo.setUTCDate(sevenDaysAgo.getUTCDate() - 6);
+
+  const fiveDaysAgo = new Date(startOfToday);
+  fiveDaysAgo.setUTCDate(fiveDaysAgo.getUTCDate() - 4);
+
+  const twelveMonthsAgo = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 11, 1),
+  );
+
+  const [
+    tradespeople,
+    users,
+    jobs,
+    todayTradespeople,
+    todayUsers,
+    todayJobs,
+    jobsByDayRaw,
+    userGrowthRaw,
+    earningsRaw,
+    todayEarningsRaw,
+    monthlyRevenueRaw,
+    topServicesRaw,
+  ] = await Promise.all([
     User.countDocuments({ role: "tradesperson" }),
-    User.countDocuments({ role: "user" }),
+    User.countDocuments({ role: { $in: ["user", "homeowner"] } }),
     Job.countDocuments(),
-  ]);
-
-  const today = new Date();
-  const sevenDaysAgo = new Date();
-  sevenDaysAgo.setDate(today.getDate() - 6);
-
-  const fiveDaysAgo = new Date();
-  fiveDaysAgo.setDate(today.getDate() - 4);
-
-  const jobsByDayRaw = await Job.aggregate([
-    { $match: { createdAt: { $gte: sevenDaysAgo } } },
-    {
-      $group: {
-        _id: {
-          $dateToString: { format: "%Y-%m-%d", date: "$createdAt" },
+    User.countDocuments({
+      role: "tradesperson",
+      createdAt: { $gte: startOfToday },
+    }),
+    User.countDocuments({
+      role: { $in: ["user", "homeowner"] },
+      createdAt: { $gte: startOfToday },
+    }),
+    Job.countDocuments({ createdAt: { $gte: startOfToday } }),
+    Job.aggregate([
+      { $match: { createdAt: { $gte: sevenDaysAgo } } },
+      {
+        $group: {
+          _id: {
+            $dateToString: { format: "%Y-%m-%d", date: "$createdAt" },
+          },
+          count: { $sum: 1 },
         },
-        count: { $sum: 1 },
       },
-    },
-  ]);
-
-  const userGrowthRaw = await User.aggregate([
-    {
-      $match: {
-        createdAt: { $gte: fiveDaysAgo },
-        role: { $in: ["tradesperson", "user"] },
-      },
-    },
-    {
-      $group: {
-        _id: {
-          date: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
-          role: "$role",
+    ]),
+    User.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: fiveDaysAgo },
+          role: { $in: ["tradesperson", "user", "homeowner"] },
         },
-        count: { $sum: 1 },
       },
-    },
+      {
+        $group: {
+          _id: {
+            date: {
+              $dateToString: { format: "%Y-%m-%d", date: "$createdAt" },
+            },
+            role: "$role",
+          },
+          count: { $sum: 1 },
+        },
+      },
+    ]),
+    Payment.aggregate([
+      { $match: { status: "succeeded" } },
+      { $group: { _id: null, amountCents: { $sum: "$amount" } } },
+    ]),
+    Payment.aggregate([
+      { $match: { status: "succeeded", paidAt: { $gte: startOfToday } } },
+      { $group: { _id: null, amountCents: { $sum: "$amount" } } },
+    ]),
+    Payment.aggregate([
+      {
+        $match: {
+          status: "succeeded",
+          paidAt: { $gte: twelveMonthsAgo },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            year: { $year: "$paidAt" },
+            month: { $month: "$paidAt" },
+          },
+          amountCents: { $sum: "$amount" },
+        },
+      },
+    ]),
+    Payment.aggregate([
+      { $match: { status: "succeeded" } },
+      {
+        $lookup: {
+          from: "jobs",
+          localField: "jobId",
+          foreignField: "_id",
+          as: "job",
+        },
+      },
+      { $unwind: "$job" },
+      {
+        $lookup: {
+          from: "categories",
+          localField: "job.categoryId",
+          foreignField: "_id",
+          as: "category",
+        },
+      },
+      {
+        $group: {
+          _id: {
+            $ifNull: [
+              { $arrayElemAt: ["$category.name", 0] },
+              "Uncategorized",
+            ],
+          },
+          count: { $sum: 1 },
+          amountCents: { $sum: "$amount" },
+        },
+      },
+      { $sort: { count: -1, amountCents: -1 } },
+      { $limit: 5 },
+    ]),
   ]);
 
   const buildRange = (start, days) => {
     const arr = [];
     for (let i = 0; i < days; i++) {
       const d = new Date(start);
-      d.setDate(start.getDate() + i);
+      d.setUTCDate(start.getUTCDate() + i);
       const key = d.toISOString().slice(0, 10);
-      const label = d.toLocaleDateString("en-US", { weekday: "short" });
+      const label = d.toLocaleDateString("en-US", {
+        weekday: "short",
+        timeZone: "UTC",
+      });
       arr.push({ key, label });
     }
     return arr;
@@ -302,8 +460,10 @@ export const getAdminOverview = catchAsync(async (_req, res) => {
   const userGrowthMap = userGrowthRaw.reduce((acc, item) => {
     const { date, role } = item._id;
     if (!acc[date]) acc[date] = { tradies: 0, users: 0 };
-    if (role === "tradesperson") acc[date].tradies = item.count;
-    if (role === "user") acc[date].users = item.count;
+    if (role === "tradesperson") acc[date].tradies += item.count;
+    if (role === "user" || role === "homeowner") {
+      acc[date].users += item.count;
+    }
     return acc;
   }, {});
 
@@ -318,14 +478,58 @@ export const getAdminOverview = catchAsync(async (_req, res) => {
     users: userGrowthMap[key]?.users || 0,
   }));
 
+  const monthlyRevenueMap = monthlyRevenueRaw.reduce((acc, item) => {
+    const key = `${item._id.year}-${String(item._id.month).padStart(2, "0")}`;
+    acc[key] = item.amountCents;
+    return acc;
+  }, {});
+
+  const monthlyRevenue = Array.from({ length: 12 }, (_, index) => {
+    const date = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 11 + index, 1),
+    );
+    const month = date.toISOString().slice(0, 7);
+    const revenue = Number(((monthlyRevenueMap[month] || 0) / 100).toFixed(2));
+    return {
+      month,
+      label: date
+        .toLocaleDateString("en-US", { month: "short", timeZone: "UTC" })
+        .toUpperCase(),
+      revenue,
+      value: revenue,
+    };
+  });
+
+  const topServices = topServicesRaw.map((item) => ({
+    name: item._id,
+    count: item.count,
+    value: item.count,
+    earnings: Number((item.amountCents / 100).toFixed(2)),
+  }));
+
+  const earnings = Number(
+    ((earningsRaw[0]?.amountCents || 0) / 100).toFixed(2),
+  );
+  const todayEarnings = Number(
+    ((todayEarningsRaw[0]?.amountCents || 0) / 100).toFixed(2),
+  );
+
   sendResponse(res, {
     statusCode: 200,
     success: true,
     message: "Overview stats",
     data: {
-      stats: { tradespeople, users, jobs },
+      stats: { tradespeople, users, jobs, earnings },
+      today: {
+        tradespeople: todayTradespeople,
+        users: todayUsers,
+        jobs: todayJobs,
+        earnings: todayEarnings,
+      },
       jobsByDay,
       userGrowth,
+      monthlyRevenue,
+      topServices,
     },
   });
 });
@@ -333,7 +537,12 @@ export const getAdminOverview = catchAsync(async (_req, res) => {
 export const listCategories = catchAsync(async (req, res) => {
   const { status } = req.query;
   const filter = {};
-  if (status) filter.status = status;
+  if (status) {
+    if (!CATEGORY_STATUSES.includes(status)) {
+      throw new AppError(400, "Invalid category status filter");
+    }
+    filter.status = status;
+  }
   const cats = await Category.find(filter).sort({ createdAt: -1 });
   sendResponse(res, {
     statusCode: 200,
@@ -346,12 +555,17 @@ export const listCategories = catchAsync(async (req, res) => {
 export const createCategory = catchAsync(async (req, res, next) => {
   const { name, status = "approved" } = req.body;
 
-  if (!name) return next(new AppError(400, "Name required"));
+  if (typeof name !== "string" || !name.trim()) {
+    return next(new AppError(400, "Name required"));
+  }
+  if (!CATEGORY_STATUSES.includes(status)) {
+    return next(new AppError(400, "Invalid category status"));
+  }
   if (!req.file) return next(new AppError(400, "Category image required"));
 
   const categoryName = name.trim();
   const exists = await Category.findOne({
-    name: new RegExp(`^${categoryName}$`, "i"),
+    name: new RegExp(`^${escapeRegExp(categoryName)}$`, "i"),
   });
 
   if (exists) return next(new AppError(400, "Category already exists"));
@@ -383,18 +597,26 @@ export const updateCategory = catchAsync(async (req, res, next) => {
 
   const previousStatus = cat.status;
 
-  if (name) {
+  if (name !== undefined) {
+    if (typeof name !== "string" || !name.trim()) {
+      return next(new AppError(400, "Name cannot be empty"));
+    }
     const categoryName = name.trim();
     const exists = await Category.findOne({
       _id: { $ne: cat._id },
-      name: new RegExp(`^${categoryName}$`, "i"),
+      name: new RegExp(`^${escapeRegExp(categoryName)}$`, "i"),
     });
 
     if (exists) return next(new AppError(400, "Category already exists"));
     cat.name = categoryName;
   }
 
-  if (status) cat.status = status;
+  if (status !== undefined) {
+    if (!CATEGORY_STATUSES.includes(status)) {
+      return next(new AppError(400, "Invalid category status"));
+    }
+    cat.status = status;
+  }
   if (req.file) {
     const upload = await uploadOnCloudinary(req.file.buffer);
     cat.image = {
@@ -461,7 +683,11 @@ export const allApplications = catchAsync(async (req, res) => {
   if (status) filter.status = status;
   const applications = await Application.find(filter)
     .sort({ createdAt: -1 })
-    .populate("jobId", "title locationText status visibility relatedFiles ")
+    .populate(
+      "jobId",
+      "title locationText status visibility media budget categoryId",
+    )
+    .populate("userId", "name email profileImage role accountStatus")
     .populate("tradespersonId", "name email profileImage role accountStatus");
   sendResponse(res, {
     statusCode: 200,
@@ -475,7 +701,11 @@ export const getApplicationDetailsAdmin = catchAsync(async (req, res, next) => {
   const { applicationId } = req.params;
 
   const application = await Application.findById(applicationId)
-    .populate("jobId", "title locationText status visibility relatedFiles")
+    .populate(
+      "jobId",
+      "title locationText status visibility media budget categoryId",
+    )
+    .populate("userId", "name email profileImage role accountStatus phone")
     .populate(
       "tradespersonId",
       "name email profileImage role accountStatus phone",

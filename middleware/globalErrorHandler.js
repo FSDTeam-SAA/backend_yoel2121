@@ -4,7 +4,7 @@ import handleDuplicateError from "../errors/handleDuplicateError.js";
 import AppError from "./../errors/AppError.js";
 
 const globalErrorHandler = (err, req, res, next) => {
-  console.log({ GlobalError: err });
+  const isProduction = process.env.NODE_ENV === "production";
   let statusCode = 500;
   let message = err.message;
   let errorSources = [
@@ -40,13 +40,29 @@ const globalErrorHandler = (err, req, res, next) => {
     ];
   }
 
-  return res.status(statusCode).json({
+  if (isProduction && statusCode >= 500 && !(err instanceof AppError)) {
+    message = "Something went wrong";
+    errorSources = [{ path: "", message }];
+  }
+
+  if (isProduction) {
+    console.error(`[${statusCode}] ${err?.name || "Error"}: ${message}`);
+  } else {
+    console.error({ GlobalError: err });
+  }
+
+  const response = {
     success: false,
     message,
     errorSources,
-    err,
-    stack: err?.stack || null,
-  });
+  };
+
+  if (!isProduction) {
+    response.err = err;
+    response.stack = err?.stack || null;
+  }
+
+  return res.status(statusCode).json(response);
 };
 
 export default globalErrorHandler;

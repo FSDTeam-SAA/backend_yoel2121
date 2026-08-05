@@ -424,7 +424,7 @@ export const getCurrentJobs = catchAsync(async (req, res) => {
   })
     .populate(
       "jobId",
-      "title locationText status visibility relatedFiles budget progressStage status ",
+      "title locationText status visibility media budget progressStage",
     )
     .sort({ createdAt: -1 });
 

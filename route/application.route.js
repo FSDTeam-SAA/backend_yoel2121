@@ -6,7 +6,7 @@ import {
   listMyApplications,
   updateApplicationPending,
 } from "../controller/application.controller.js";
-import { protect } from "../middleware/auth.middleware.js";
+import { protect, requireAdmin } from "../middleware/auth.middleware.js";
 import upload from "../middleware/multer.middleware.js";
 import { allApplications } from "../controller/admin.controller.js";
 
@@ -29,7 +29,7 @@ router.patch(
 router.patch("/:applicationId/decision", protect, userDecision);
 
 // all applications
-router.get("/", protect, allApplications);
+router.get("/", protect, requireAdmin, allApplications);
 
 router.get("/:applicationId", protect, getApplication);
 

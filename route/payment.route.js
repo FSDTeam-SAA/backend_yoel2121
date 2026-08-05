@@ -5,7 +5,7 @@ import {
   initiateJobPayment,
   listAllPayments,
 } from "../controller/payment.controller.js";
-import { protect } from "../middleware/auth.middleware.js";
+import { protect, requireAdmin } from "../middleware/auth.middleware.js";
 
 const router = Router();
 
@@ -17,6 +17,6 @@ router.post("/confirm", protect, confirmJobPayment);
 router.get("/my", protect, getMyPayments);
 
 // Admin: all payments
-router.get("/", protect, listAllPayments);
+router.get("/", protect, requireAdmin, listAllPayments);
 
 export default router;
