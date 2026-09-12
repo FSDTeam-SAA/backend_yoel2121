@@ -7,6 +7,7 @@ import { sendEmail } from "../utils/sendEmail.js";
 import sendResponse from "../utils/sendResponse.js";
 import { notifyAdmins } from "../utils/notification.js";
 import { User } from "./../model/user.model.js";
+import verifyAppleToken from "../utils/verifyAppleToken.js";
 import verifyGoogleToken from "../utils/verifyGoogleToken.js";
 
 const generateVerificationCode = () => {
@@ -773,6 +774,132 @@ export const googleLogin = catchAsync(async (req, res, next) => {
     statusCode: httpStatus.OK,
     success: true,
     message: isNewUser ? "Account created successfully." : "Google login successful",
+    data: {
+      accessToken,
+      refreshToken,
+      role: user.role,
+      _id: user._id,
+      accountStatus: user.accountStatus,
+      isNewUser,
+      user: sanitizeUser(user),
+    },
+  });
+});
+
+export const appleLogin = catchAsync(async (req, res, next) => {
+  const { identityToken, rawNonce, role, name } = req.body;
+
+  if (!identityToken || !rawNonce) {
+    return next(new AppError(400, "identityToken and rawNonce are required"));
+  }
+  if (!role || !["user", "tradesperson"].includes(role)) {
+    return next(
+      new AppError(400, 'role is required and must be "user" or "tradesperson"'),
+    );
+  }
+
+  let appleUser;
+  try {
+    appleUser = await verifyAppleToken(identityToken, rawNonce);
+  } catch (error) {
+    console.error("Apple token verification failed:", error.message);
+    return next(new AppError(401, "Invalid Apple identity token"));
+  }
+
+  let user = await User.findOne({ appleId: appleUser.appleId });
+  if (!user && appleUser.email) {
+    user = await User.findOne({ email: appleUser.email });
+  }
+
+  let isNewUser = false;
+  if (!user) {
+    if (!appleUser.email) {
+      return next(
+        new AppError(
+          400,
+          "Apple did not provide an email address for this new account. Revoke Zentrofix in Apple ID settings, then try again.",
+        ),
+      );
+    }
+
+    const safeName = typeof name === "string"
+      ? name.trim().replace(/\s+/g, " ").slice(0, 100)
+      : "";
+    isNewUser = true;
+    user = await User.create({
+      name: safeName || "Apple User",
+      email: appleUser.email,
+      role,
+      isEmailVerified: true,
+      accountStatus: "approved",
+      appleId: appleUser.appleId,
+      provider: "apple",
+    });
+
+    await notifyAdmins({
+      title: "New account registered",
+      message: `${user.name || user.email} registered via Apple as ${user.role}.`,
+      type: "user_registered",
+      data: {
+        userId: user._id,
+        role: user.role,
+        accountStatus: user.accountStatus,
+      },
+    });
+  }
+
+  if (user.accountStatus === "suspended" || user.accountStatus === "rejected") {
+    return sendResponse(res, {
+      statusCode: httpStatus.FORBIDDEN,
+      success: false,
+      message: `Your account has been ${user.accountStatus}.`,
+      data: { email: user.email },
+    });
+  }
+
+  if (user.appleId && user.appleId !== appleUser.appleId) {
+    return next(
+      new AppError(409, "This email is already linked to another Apple account"),
+    );
+  }
+
+  // Link a verified Apple identity to an existing email/Google account so the
+  // user can use either login option without creating duplicate profiles.
+  user.appleId = appleUser.appleId;
+  if (appleUser.emailVerified) user.isEmailVerified = true;
+  if (
+    user.accountStatus === "pending" &&
+    (user.role === "user" || user.role === "homeowner")
+  ) {
+    user.accountStatus = "approved";
+  }
+
+  const jwtPayload = { _id: user._id, email: user.email, role: user.role };
+  const accessToken = createToken(
+    jwtPayload,
+    process.env.JWT_ACCESS_SECRET,
+    process.env.JWT_ACCESS_EXPIRES_IN,
+  );
+  const refreshToken = createToken(
+    jwtPayload,
+    process.env.JWT_REFRESH_SECRET,
+    process.env.JWT_REFRESH_EXPIRES_IN,
+  );
+
+  user.refreshToken = refreshToken;
+  await user.save();
+
+  res.cookie("refreshToken", refreshToken, {
+    secure: true,
+    httpOnly: true,
+    sameSite: "none",
+    maxAge: 1000 * 60 * 60 * 24 * 365,
+  });
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: isNewUser ? "Account created successfully." : "Apple login successful",
     data: {
       accessToken,
       refreshToken,

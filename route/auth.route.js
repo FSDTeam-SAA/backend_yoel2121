@@ -1,5 +1,6 @@
 import express from "express";
 import {
+  appleLogin,
   changePassword,
   forgetPassword,
   googleLogin,
@@ -17,6 +18,7 @@ import { protect } from "../middleware/auth.middleware.js";
 const router = express.Router();
 
 router.post("/google", googleLogin);
+router.post("/apple", appleLogin);
 router.post("/register", register);
 router.post("/login", login);
 router.post("/verify", verifyOTP);
