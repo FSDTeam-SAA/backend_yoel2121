@@ -1,6 +1,6 @@
 import nodemailer from "nodemailer";
 import dotenv from "dotenv";
-import cloudinary from "cloudinary";
+import AppError from "../errors/AppError.js";
 
 dotenv.config();
 
@@ -13,9 +13,12 @@ export const sendEmail = async (to, subject, html) => {
   }
 
   const transporter = nodemailer.createTransport({
-    service: "gmail",
+    host: process.env.SMTP_HOST || "smtp.gmail.com",
     port: SMTP_PORT,
     secure: SMTP_SECURE,
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 20000,
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASS,
@@ -23,13 +26,26 @@ export const sendEmail = async (to, subject, html) => {
   });
 
   const content = html ?? "";
-  const info = await transporter.sendMail({
-    from: process.env.EMAIL_USER,
-    to,
-    subject: subject ? subject : "Varification Code : use it by 10 minutes",
-    text: content.replace(/<[^>]*>/g, " ").trim(),
-    html: content,
-  });
+  let info;
+  try {
+    info = await transporter.sendMail({
+      from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
+      to,
+      subject: subject ? subject : "Varification Code : use it by 10 minutes",
+      text: content.replace(/<[^>]*>/g, " ").trim(),
+      html: content,
+    });
+  } catch (error) {
+    console.error("[email] SMTP delivery failed", {
+      code: error.code,
+      responseCode: error.responseCode,
+      command: error.command,
+    });
+    throw new AppError(
+      503,
+      "Unable to send email right now. Please try again later or contact support.",
+    );
+  }
 
   if (!info?.accepted?.length || info?.rejected?.length) {
     throw new Error(
