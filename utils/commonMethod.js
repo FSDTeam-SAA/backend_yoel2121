@@ -1,24 +1,10 @@
-import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import { v4 as uuidv4 } from "uuid";
 import { v2 as cloudinary } from "cloudinary";
-import nodemailer from "nodemailer";
+import { sendEmail } from "./sendEmail.js";
+export { generateOTP } from "./generateOTP.js";
 import dotenv from "dotenv";
 dotenv.config();
-
-const SMTP_HOST = process.env.SMTP_HOST || "smtp-relay.brevo.com";
-const SMTP_PORT = Number(process.env.SMTP_PORT || 587);
-const SMTP_SECURE = process.env.SMTP_SECURE === "true";
-const EMAIL_FROM = process.env.EMAIL_FROM || process.env.EMAIL_USER;
-
-// Generate a random OTP
-export const generateOTP = () => {
-  const OTP_LENGTH = 4;
-  const otp = Array.from({ length: OTP_LENGTH }, () =>
-    crypto.randomInt(0, 10),
-  ).join("");
-  return otp;
-};
 
 //Generate unique ID
 export const generateUniqueId = () => {
@@ -42,33 +28,8 @@ export const uniqueTransactionId = () => {
   return uuidv4().replace(/-/g, "").substr(0, 12).toUpperCase();
 };
 
-const transporter = nodemailer.createTransport({
-  host: SMTP_HOST,
-  port: SMTP_PORT,
-  secure: SMTP_SECURE,
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-});
-
-export const sendOTP = async (email, code) => {
-  const mailOptions = {
-    from: EMAIL_FROM,
-    to: email,
-    subject: "Verification Code",
-    text: `Your verification code is: ${code}`,
-  };
-
-  const info = await transporter.sendMail(mailOptions);
-  if (!info?.accepted?.length || info?.rejected?.length) {
-    throw new Error(
-      `OTP email rejected by SMTP relay. accepted=${info?.accepted?.length || 0}, rejected=${info?.rejected?.length || 0}`
-    );
-  }
-
-  return info;
-};
+export const sendOTP = (email, code) =>
+  sendEmail(email, "Verification Code", `Your verification code is: ${code}`);
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
