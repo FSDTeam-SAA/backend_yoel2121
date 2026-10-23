@@ -11,7 +11,7 @@ import verifyAppleToken from "../utils/verifyAppleToken.js";
 import verifyGoogleToken from "../utils/verifyGoogleToken.js";
 
 const generateVerificationCode = () => {
-  return Math.floor(1000 + Math.random() * 9000);
+  return generateOTP();
 };
 
 const buildVerificationOtpEmail = (otp) => `
