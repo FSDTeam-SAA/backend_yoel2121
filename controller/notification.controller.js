@@ -84,3 +84,35 @@ export const markAllNotificationsRead = catchAsync(async (req, res) => {
     data: {},
   });
 });
+
+export const deleteNotification = catchAsync(async (req, res, next) => {
+  const notification = await Notification.findOneAndDelete({
+    _id: req.params.notificationId,
+    user: req.user._id,
+  });
+
+  if (!notification) return next(new AppError(404, "Notification not found"));
+
+  if (!notification.isRead) {
+    await emitUnreadNotificationCount(req.user._id);
+  }
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Notification deleted",
+    data: {},
+  });
+});
+
+export const deleteAllNotifications = catchAsync(async (req, res) => {
+  await Notification.deleteMany({ user: req.user._id });
+  await emitUnreadNotificationCount(req.user._id);
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "All notifications deleted",
+    data: {},
+  });
+});

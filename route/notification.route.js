@@ -1,5 +1,7 @@
 import { Router } from "express";
 import {
+  deleteAllNotifications,
+  deleteNotification,
   getUnreadNotificationCount,
   listMyNotifications,
   markAllNotificationsRead,
@@ -19,5 +21,7 @@ router.patch("/read-all", protect, markAllNotificationsRead);
 router.patch("/:notificationId/read", protect, markNotificationRead);
 router.post("/device-tokens", protect, registerDeviceToken);
 router.delete("/device-tokens", protect, unregisterDeviceToken);
+router.delete("/", protect, deleteAllNotifications);
+router.delete("/:notificationId", protect, deleteNotification);
 
 export default router;
